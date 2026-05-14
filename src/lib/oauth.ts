@@ -44,7 +44,16 @@ function randomState(): string {
 export function beginOAuth(returnTo?: string): void {
   const state = randomState()
   sessionStorage.setItem(STATE_KEY, state)
-  if (returnTo) sessionStorage.setItem(RETURN_KEY, returnTo)
+  if (returnTo) {
+    // React Router's basename auto-prefixes paths, so strip it from the
+    // stored value to avoid double-prefixing on return.
+    const baseNoSlash = import.meta.env.BASE_URL.replace(/\/$/, '')
+    const normalized =
+      baseNoSlash && returnTo.startsWith(baseNoSlash)
+        ? returnTo.slice(baseNoSlash.length) || '/'
+        : returnTo
+    sessionStorage.setItem(RETURN_KEY, normalized)
+  }
   const redirectUri = `${location.origin}${import.meta.env.BASE_URL}auth/callback`
   const url = new URL('https://github.com/login/oauth/authorize')
   url.searchParams.set('client_id', clientId())
