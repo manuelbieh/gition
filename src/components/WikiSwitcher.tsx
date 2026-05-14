@@ -94,6 +94,15 @@ export function WikiSwitcher({ owner, repo }: Props) {
             <button
               onClick={() => {
                 setOpen(false)
+                navigate(`/${current}/_settings`)
+              }}
+              className="w-full text-left px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            >
+              Wiki settings…
+            </button>
+            <button
+              onClick={() => {
+                setOpen(false)
                 navigate('/')
               }}
               className="w-full text-left px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800"
