@@ -2,17 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { beginOAuth, isOAuthConfigured } from '../lib/oauth'
 import { getAuthKind } from '../lib/auth'
-
-const RECENT_KEY = 'gition.recents.v1'
-
-function getRecents(): string[] {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY)
-    return raw ? (JSON.parse(raw) as string[]) : []
-  } catch {
-    return []
-  }
-}
+import { getRecents } from '../lib/recents'
 
 export function Landing() {
   const navigate = useNavigate()

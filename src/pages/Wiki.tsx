@@ -8,23 +8,10 @@ import { Sidebar } from '../components/Sidebar'
 import { PageView } from '../components/PageView'
 import { Editor } from '../components/Editor'
 import { AuthPrompt } from '../components/AuthPrompt'
+import { WikiSwitcher } from '../components/WikiSwitcher'
 import { GitHubError } from '../lib/github'
 import { getToken } from '../lib/auth'
-
-const RECENT_KEY = 'gition.recents.v1'
-
-function recordRecent(slug: string) {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY)
-    const existing = (raw ? (JSON.parse(raw) as string[]) : []).filter(
-      (x) => x !== slug,
-    )
-    existing.unshift(slug)
-    localStorage.setItem(RECENT_KEY, JSON.stringify(existing.slice(0, 12)))
-  } catch {
-    // ignore
-  }
-}
+import { recordRecent } from '../lib/recents'
 
 export function Wiki() {
   const params = useParams()
@@ -118,13 +105,11 @@ export function Wiki() {
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 bg-zinc-50/95 dark:bg-zinc-900/80 backdrop-blur z-10">
           <button
             onClick={() => navigate('/')}
-            className="text-xs uppercase tracking-wider text-zinc-500 hover:text-violet-600"
+            className="text-xs uppercase tracking-wider text-zinc-500 hover:text-violet-600 mb-1"
           >
             gition
           </button>
-          <div className="font-medium truncate mt-1">
-            {owner}/{repo}
-          </div>
+          <WikiSwitcher owner={owner} repo={repo} />
         </div>
         <Sidebar
           root={wiki.root}
