@@ -6,6 +6,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>gition</title>
     <meta name="description" content="A Notion-style wiki powered by your GitHub repos." />
+    <script>
+      // SPA-fallback companion: replay the path that 404.html captured.
+      (function () {
+        var params = new URLSearchParams(location.search)
+        var p = params.get('p')
+        if (!p) return
+        params.delete('p')
+        var rest = params.toString()
+        var search = rest ? '?' + rest : ''
+        history.replaceState(null, '', location.pathname.replace(/\/$/, '') + p + search + location.hash)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
