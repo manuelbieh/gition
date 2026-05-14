@@ -20,10 +20,12 @@ import {
   ensureDraftBranch,
   publishDraft,
   resetDraftBranchToTarget,
+  uploadAssetToDraftBranch,
   type AutosaveSession,
   type DraftBranchInfo,
   type PublishResult,
 } from '../lib/draftBranch'
+import { slugify } from '../lib/slug'
 import { readDraft, writeDraft, clearDraft } from '../lib/drafts'
 import { displayName } from '../lib/slug'
 
@@ -73,6 +75,7 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     | { phase: 'done'; result: PublishResult }
     | { phase: 'error'; message: string }
   >({ phase: 'idle' })
+  const [uploadCount, setUploadCount] = useState(0)
   const initialMarkdownRef = useRef<string>('')
   const frontmatterRef = useRef<string>('')
   const seededRef = useRef(false)
@@ -86,6 +89,48 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const maxAgeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const inFlightRef = useRef<Promise<void> | null>(null)
+
+  // Refs let handlePaste/handleDrop call the latest version of these without
+  // remounting the editor when user.data resolves or filePath changes.
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null)
+  const handleImageDropRef = useRef<(files: File[]) => Promise<void>>(async () => {})
+
+  handleImageDropRef.current = async (files: File[]) => {
+    if (!user.data) {
+      console.warn('[gition] image upload requires sign-in')
+      return
+    }
+    for (const file of files) {
+      setUploadCount((n) => n + 1)
+      try {
+        if (!draftBranchRef.current) {
+          draftBranchRef.current = await ensureDraftBranch(
+            ref,
+            user.data.login,
+            ref.branch,
+          )
+        }
+        const { assetPath, relative } = assetPathFor(filePath, file.name)
+        const bytes = new Uint8Array(await file.arrayBuffer())
+        await uploadAssetToDraftBranch({
+          ref,
+          branch: draftBranchRef.current.branch,
+          path: assetPath,
+          bytes,
+          message: `gition draft: upload ${file.name}`,
+        })
+        editorRef.current
+          ?.chain()
+          .focus()
+          .setImage({ src: relative, alt: file.name })
+          .run()
+      } catch (err) {
+        console.error('[gition] image upload failed', err)
+      } finally {
+        setUploadCount((n) => n - 1)
+      }
+    }
+  }
 
   const editor = useEditor({
     extensions: [
@@ -110,6 +155,20 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     editorProps: {
       attributes: {
         class: 'prose prose-zinc dark:prose-invert max-w-none focus:outline-none min-h-[60vh]',
+      },
+      handlePaste(_view, event) {
+        const files = filesFromDataTransfer(event.clipboardData)
+        if (files.length === 0) return false
+        event.preventDefault()
+        void handleImageDropRef.current(files)
+        return true
+      },
+      handleDrop(_view, event) {
+        const files = filesFromDataTransfer((event as DragEvent).dataTransfer)
+        if (files.length === 0) return false
+        event.preventDefault()
+        void handleImageDropRef.current(files)
+        return true
       },
     },
     onUpdate({ editor }) {
@@ -214,6 +273,11 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
       }, MAX_AGE_MS)
     }
   }, [commitDraft])
+
+  // Keep editorRef in sync so the paste/drop handlers can access the editor.
+  useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
 
   // Seed editor content once file + editor are both ready.
   useEffect(() => {
@@ -334,6 +398,11 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
           <span className="text-xs uppercase tracking-wider text-zinc-500">Editing</span>
           <span className="font-medium truncate">{displayName(filePath)}</span>
           {statusBadge}
+          {uploadCount > 0 && (
+            <span className="text-xs text-violet-600">
+              · uploading {uploadCount} file{uploadCount > 1 ? 's' : ''}…
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {publishState.phase === 'error' && (
@@ -408,6 +477,41 @@ function renderStatusBadge(state: AutosaveState, dirty: boolean) {
       </span>
     )
   return null
+}
+
+function filesFromDataTransfer(dt: DataTransfer | null): File[] {
+  if (!dt) return []
+  const out: File[] = []
+  for (let i = 0; i < dt.items.length; i++) {
+    const item = dt.items[i]
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const f = item.getAsFile()
+      if (f) out.push(f)
+    }
+  }
+  return out
+}
+
+// Asset path convention: <page-without-md>.assets/<slug>-<timestamp>.<ext>
+// The relative markdown reference resolves from the page's containing folder.
+function assetPathFor(
+  pagePath: string,
+  filename: string,
+): { assetPath: string; relative: string } {
+  const folder = pagePath.replace(/\.md$/i, '.assets')
+  const dot = filename.lastIndexOf('.')
+  const stem = dot > 0 ? filename.slice(0, dot) : filename
+  const ext = dot > 0 ? filename.slice(dot) : ''
+  const safeStem = slugify(stem) || 'asset'
+  const stamped = `${safeStem}-${Date.now()}${ext.toLowerCase()}`
+  const assetPath = `${folder}/${stamped}`
+  const pageFolder = pagePath.includes('/')
+    ? pagePath.slice(0, pagePath.lastIndexOf('/'))
+    : ''
+  const relative = pageFolder
+    ? './' + assetPath.slice(pageFolder.length + 1)
+    : './' + assetPath
+  return { assetPath, relative }
 }
 
 function stripLeadingTitleHeading(body: string, title: string): string {

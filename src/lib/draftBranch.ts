@@ -79,10 +79,19 @@ export async function getBranchHead(
 }
 
 async function createBlob(ref: RepoRef, content: string): Promise<string> {
-  // base64-encode utf-8 → blob to preserve arbitrary content faithfully
   const bytes = new TextEncoder().encode(content)
+  return createBlobFromBytes(ref, bytes)
+}
+
+async function createBlobFromBytes(
+  ref: RepoRef,
+  bytes: Uint8Array,
+): Promise<string> {
   let bin = ''
-  for (const b of bytes) bin += String.fromCharCode(b)
+  const CHUNK = 0x8000 // avoid call stack overflow on large files
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
   const res = await ghFetch(
     `/repos/${ref.owner}/${ref.repo}/git/blobs`,
     {
@@ -238,6 +247,26 @@ export async function resetDraftBranchToTarget(
   const target = await getRef(ref, `heads/${targetBranch}`)
   if (!target) throw new Error(`Target branch '${targetBranch}' not found`)
   await updateRef(ref, `heads/${draftBranch}`, target.object.sha, true)
+}
+
+// Uploads a binary file (typically an asset like a pasted image) to the
+// draft branch. Returns the path the file was written to. Unlike
+// autosaveToDraftBranch, assets always extend the current branch tip —
+// there's no session-squash to worry about.
+export async function uploadAssetToDraftBranch(args: {
+  ref: RepoRef
+  branch: string
+  path: string
+  bytes: Uint8Array
+  message: string
+}): Promise<{ commitSha: string }> {
+  const { ref, branch, path, bytes, message } = args
+  const head = await getBranchHead(ref, branch)
+  const blobSha = await createBlobFromBytes(ref, bytes)
+  const treeSha = await createTree(ref, head.treeSha, path, blobSha)
+  const commitSha = await createCommit(ref, message, treeSha, head.commitSha)
+  await updateRef(ref, `heads/${branch}`, commitSha, true)
+  return { commitSha }
 }
 
 // Lists all gition/drafts/* branches in the repo. Used to discover other
