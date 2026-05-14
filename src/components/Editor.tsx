@@ -26,6 +26,7 @@ import {
   type PublishResult,
 } from '../lib/draftBranch'
 import { slugify } from '../lib/slug'
+import { FrontmatterControls, type Frontmatter } from './FrontmatterControls'
 import { readDraft, writeDraft, clearDraft } from '../lib/drafts'
 import { displayName } from '../lib/slug'
 
@@ -77,7 +78,7 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
   >({ phase: 'idle' })
   const [uploadCount, setUploadCount] = useState(0)
   const initialMarkdownRef = useRef<string>('')
-  const frontmatterRef = useRef<string>('')
+  const [frontmatter, setFrontmatter] = useState<Frontmatter>({})
   const seededRef = useRef(false)
 
   // Per-page autosave session state (resets on filePath change via useEffect)
@@ -217,9 +218,7 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     }
     if (!dirty) return
 
-    const fullContent = frontmatterRef.current
-      ? `${frontmatterRef.current}${md}`
-      : md
+    const fullContent = serializeWithFrontmatter(md, frontmatter)
 
     const run = (async () => {
       setAutosave({ phase: 'saving' })
@@ -286,7 +285,7 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     ;(async () => {
       const remote = matter(file.data!.text)
       const body = stripLeadingTitleHeading(remote.content, displayName(filePath))
-      frontmatterRef.current = remote.matter
+      setFrontmatter(remote.data as Frontmatter)
       initialMarkdownRef.current = body
 
       const draft = await readDraft(ref, filePath)
@@ -452,9 +451,15 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
       </header>
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-12 py-10 relative">
-          <h1 className="text-4xl font-bold tracking-tight mb-8 text-zinc-900 dark:text-zinc-50">
-            {displayName(filePath)}
-          </h1>
+          <FrontmatterControls
+            frontmatter={frontmatter}
+            fallbackTitle={displayName(filePath)}
+            onChange={(next) => {
+              setFrontmatter(next)
+              setDirty(true)
+              setAutosave({ phase: 'pending' })
+            }}
+          />
           <EditorContent editor={editor} />
           <TableMenu editor={editor} />
         </div>
@@ -512,6 +517,15 @@ function assetPathFor(
     ? './' + assetPath.slice(pageFolder.length + 1)
     : './' + assetPath
   return { assetPath, relative }
+}
+
+function serializeWithFrontmatter(
+  body: string,
+  frontmatter: Frontmatter,
+): string {
+  const keys = Object.keys(frontmatter)
+  if (keys.length === 0) return body
+  return matter.stringify(body, frontmatter)
 }
 
 function stripLeadingTitleHeading(body: string, title: string): string {
