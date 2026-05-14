@@ -1,0 +1,11 @@
+name = "gition-auth"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+
+# Secrets (set via `wrangler secret put`):
+#   GITHUB_CLIENT_ID
+#   GITHUB_CLIENT_SECRET
+#
+# Variables: ALLOWED_ORIGINS — comma-separated origins the worker accepts.
+[vars]
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:5174,https://manuelbieh.github.io"

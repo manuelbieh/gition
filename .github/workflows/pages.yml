@@ -32,6 +32,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm build
+        env:
+          VITE_GITHUB_CLIENT_ID: ${{ secrets.VITE_GITHUB_CLIENT_ID }}
+          VITE_AUTH_WORKER_URL: ${{ secrets.VITE_AUTH_WORKER_URL }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
