@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import type { WikiNode } from '../lib/tree'
+import type { PresenceMap } from '../lib/presence'
 
 type Props = {
   root: WikiNode
   activeSlug: string
+  presence?: PresenceMap
   onNavigate: (slug: string) => void
 }
 
-export function Sidebar({ root, activeSlug, onNavigate }: Props) {
+export function Sidebar({ root, activeSlug, presence, onNavigate }: Props) {
   return (
     <nav className="py-2 text-sm">
       {root.children.map((child) => (
@@ -17,6 +19,7 @@ export function Sidebar({ root, activeSlug, onNavigate }: Props) {
           node={child}
           depth={0}
           activeSlug={activeSlug}
+          presence={presence}
           onNavigate={onNavigate}
         />
       ))}
@@ -28,11 +31,13 @@ function NodeRow({
   node,
   depth,
   activeSlug,
+  presence,
   onNavigate,
 }: {
   node: WikiNode
   depth: number
   activeSlug: string
+  presence?: PresenceMap
   onNavigate: (slug: string) => void
 }) {
   const slug = node.slugPath.join('/')
@@ -79,12 +84,20 @@ function NodeRow({
         )}
         <span
           className={clsx(
-            'truncate',
+            'truncate flex-1',
             !node.filePath && 'text-zinc-500 dark:text-zinc-400',
           )}
         >
           {node.title}
         </span>
+        {node.filePath && presence?.get(node.filePath) && (
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"
+            title={`${presence.get(node.filePath)!.length} draft${
+              presence.get(node.filePath)!.length > 1 ? 's' : ''
+            }`}
+          />
+        )}
       </div>
       {open &&
         node.children.map((child) => (
@@ -93,6 +106,7 @@ function NodeRow({
             node={child}
             depth={depth + 1}
             activeSlug={activeSlug}
+            presence={presence}
             onNavigate={onNavigate}
           />
         ))}

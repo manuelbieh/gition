@@ -12,6 +12,7 @@ import { WikiSwitcher } from '../components/WikiSwitcher'
 import { GitHubError } from '../lib/github'
 import { getToken } from '../lib/auth'
 import { recordRecent } from '../lib/recents'
+import { usePresence } from '../lib/presence'
 
 export function Wiki() {
   const params = useParams()
@@ -61,6 +62,9 @@ export function Wiki() {
         : null,
     [tree.data, config],
   )
+
+  // Soft presence — only when authenticated (anonymous viewers don't get it)
+  const presence = usePresence(ref, !!getToken())
 
   if (meta.isLoading) return <FullPageMessage>Loading repo…</FullPageMessage>
   if (meta.error) {
@@ -114,6 +118,7 @@ export function Wiki() {
         <Sidebar
           root={wiki.root}
           activeSlug={slugPath}
+          presence={presence.data?.byPath}
           onNavigate={(slug) =>
             navigate(`/${owner}/${repo}${slug ? '/' + slug : ''}`)
           }
@@ -134,6 +139,7 @@ export function Wiki() {
               ref={ref}
               filePath={filePath}
               wiki={wiki}
+              presence={presence.data?.byPath.get(filePath)}
               onEdit={
                 getToken()
                   ? () => navigate(`?edit=1`, { replace: false })

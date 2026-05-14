@@ -8,6 +8,8 @@ import { Buffer } from 'buffer'
 import { fetchFile, rawUrl, type RepoRef } from '../lib/github'
 import { resolveRelativeRepoPath, type WikiTree } from '../lib/tree'
 import { displayName } from '../lib/slug'
+import { relativeTime } from '../lib/presence'
+import type { DraftActivity } from '../lib/draftBranch'
 
 // gray-matter ships a CJS bundle that expects a Node Buffer global; polyfill it
 // for the browser. Vite tree-shakes this if matter isn't used elsewhere.
@@ -17,10 +19,11 @@ type Props = {
   ref: RepoRef
   filePath: string
   wiki: WikiTree
+  presence?: DraftActivity[]
   onEdit?: () => void
 }
 
-export function PageView({ ref, filePath, wiki, onEdit }: Props) {
+export function PageView({ ref, filePath, wiki, presence, onEdit }: Props) {
   const params = useParams()
   const navigate = useNavigate()
 
@@ -121,6 +124,34 @@ export function PageView({ ref, filePath, wiki, onEdit }: Props) {
         <h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
           {title}
         </h1>
+        {presence && presence.length > 0 && (
+          <div className="mt-4 flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-3 py-2 text-sm">
+            <div className="flex -space-x-1.5">
+              {presence.slice(0, 3).map((d) => (
+                <img
+                  key={d.username}
+                  src={d.authorAvatarUrl ?? ''}
+                  alt={d.username}
+                  className="w-6 h-6 rounded-full ring-2 ring-amber-50 dark:ring-amber-950"
+                  title={`@${d.username} · ${relativeTime(d.lastCommitAt)}`}
+                />
+              ))}
+            </div>
+            <span className="text-amber-800 dark:text-amber-200 text-xs">
+              {presence.length === 1
+                ? `@${presence[0].username} has unpublished changes here · ${relativeTime(presence[0].lastCommitAt)}`
+                : `${presence.length} people have drafts on this page`}
+            </span>
+            {presence.length === 1 && (
+              <a
+                href={`?branch=${encodeURIComponent(presence[0].branch)}`}
+                className="ml-auto text-xs text-amber-900 dark:text-amber-200 underline hover:no-underline"
+              >
+                View draft
+              </a>
+            )}
+          </div>
+        )}
       </header>
       <div className="prose prose-zinc dark:prose-invert max-w-none prose-headings:font-semibold prose-headings:tracking-tight prose-a:text-violet-600 dark:prose-a:text-violet-400 prose-a:no-underline hover:prose-a:underline">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>

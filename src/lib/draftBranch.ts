@@ -240,6 +240,81 @@ export async function resetDraftBranchToTarget(
   await updateRef(ref, `heads/${draftBranch}`, target.object.sha, true)
 }
 
+// Lists all gition/drafts/* branches in the repo. Used to discover other
+// users' active drafts for soft presence.
+export type DraftBranchRef = {
+  branch: string
+  username: string
+  sha: string
+}
+
+export async function listDraftBranches(
+  ref: RepoRef,
+): Promise<DraftBranchRef[]> {
+  try {
+    const res = await ghFetch(
+      `/repos/${ref.owner}/${ref.repo}/git/matching-refs/heads/gition/drafts/`,
+    )
+    const refs = (await res.json()) as Array<{
+      ref: string
+      object: { sha: string }
+    }>
+    return refs.map((r) => ({
+      branch: r.ref.replace(/^refs\/heads\//, ''),
+      username: r.ref.replace(/^refs\/heads\/gition\/drafts\//, ''),
+      sha: r.object.sha,
+    }))
+  } catch (err) {
+    if (err instanceof GitHubError && err.status === 404) return []
+    throw err
+  }
+}
+
+// Returns the set of file paths changed between target and the draft branch,
+// along with the latest commit's author + timestamp.
+export type DraftActivity = {
+  branch: string
+  username: string
+  aheadBy: number
+  changedFiles: string[]
+  lastCommitAt: string | null
+  authorAvatarUrl: string | null
+}
+
+export async function fetchDraftActivity(
+  ref: RepoRef,
+  draftBranch: string,
+  username: string,
+  targetBranch: string,
+): Promise<DraftActivity | null> {
+  try {
+    const res = await ghFetch(
+      `/repos/${ref.owner}/${ref.repo}/compare/${encodeURIComponent(targetBranch)}...${encodeURIComponent(draftBranch)}`,
+    )
+    const json = (await res.json()) as {
+      ahead_by: number
+      files?: Array<{ filename: string }>
+      commits?: Array<{
+        commit: { author?: { date?: string } }
+        author?: { avatar_url?: string }
+      }>
+    }
+    if (json.ahead_by <= 0) return null
+    const lastCommit = json.commits?.[json.commits.length - 1]
+    return {
+      branch: draftBranch,
+      username,
+      aheadBy: json.ahead_by,
+      changedFiles: (json.files ?? []).map((f) => f.filename),
+      lastCommitAt: lastCommit?.commit.author?.date ?? null,
+      authorAvatarUrl: lastCommit?.author?.avatar_url ?? null,
+    }
+  } catch (err) {
+    if (err instanceof GitHubError && err.status === 404) return null
+    throw err
+  }
+}
+
 export type AutosaveResult = {
   newCommitSha: string
   newSession: AutosaveSession
