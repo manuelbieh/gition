@@ -1,0 +1,6 @@
+- generic [ref=e4]:
+  - heading "gition" [level=1] [ref=e5]
+  - paragraph [ref=e6]: Open any GitHub repo as a Notion-style wiki.
+  - generic [ref=e7]:
+    - textbox "owner/repo or github.com/owner/repo" [active] [ref=e8]
+    - button "Open" [ref=e9]

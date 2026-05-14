@@ -4,23 +4,21 @@
     <meta charset="UTF-8" />
     <title>gition</title>
     <script>
-      // SPA fallback for GitHub Pages: rewrite the path into a query string
-      // and bounce to the project root. index.html reads it back and replays
-      // it via history.replaceState before React Router boots.
+      // SPA fallback for GitHub Pages. The deploy base path is injected at
+      // build time (see vite.config.ts) via the replace404Base plugin.
       (function () {
-        var base = document.querySelector('base')?.href
-          || (location.protocol + '//' + location.host + '/')
-        var segments = location.pathname.split('/')
-        // Match the deploy base path (e.g. /gition/) to keep custom-domain
-        // and project-page deploys both working.
-        var basePath = '/'
-        var hostBase = new URL(base).pathname
-        if (hostBase.length > 1) basePath = hostBase
+        var basePath = '__GITION_BASE__'
+        if (!location.pathname.startsWith(basePath)) {
+          location.replace(basePath)
+          return
+        }
         var rest = location.pathname.slice(basePath.length)
-        var qs = (rest ? '?p=' + encodeURIComponent('/' + rest) : '')
-          + (location.search ? (rest ? '&' : '?') + location.search.slice(1) : '')
+        var qs =
+          (rest ? '?p=' + encodeURIComponent('/' + rest) : '') +
+          (location.search
+            ? (rest ? '&' : '?') + location.search.slice(1)
+            : '')
         location.replace(basePath + qs + location.hash)
-        void segments
       })()
     </script>
   </head>

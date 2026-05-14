@@ -1,0 +1,10 @@
+- list [ref=e2]:
+  - listitem [ref=e3]:
+    - link "http://github.com/manuelbieh" [ref=e4] [cursor=pointer]:
+      - /url: http://github.com/manuelbieh
+  - listitem [ref=e5]:
+    - link "http://github.com/wiremore" [ref=e6] [cursor=pointer]:
+      - /url: http://github.com/wiremore
+  - listitem [ref=e7]:
+    - link "http://manuelbieh.com" [ref=e8] [cursor=pointer]:
+      - /url: http://manuelbieh.com
