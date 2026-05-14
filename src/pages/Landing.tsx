@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { beginOAuth, isOAuthConfigured } from '../lib/oauth'
 import { getAuthKind } from '../lib/auth'
 import { getRecents } from '../lib/recents'
@@ -77,12 +77,12 @@ export function Landing() {
             <ul className="space-y-1">
               {recents.slice(0, 8).map((r) => (
                 <li key={r}>
-                  <a
-                    href={`/${r}`}
+                  <Link
+                    to={`/${r}`}
                     className="text-zinc-700 dark:text-zinc-300 hover:text-violet-600 dark:hover:text-violet-400"
                   >
                     {r}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
