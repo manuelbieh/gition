@@ -28,3 +28,44 @@ body {
   margin: 0;
   @apply bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100;
 }
+
+/* TipTap table editing styles */
+.ProseMirror table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 1em 0;
+  overflow: hidden;
+}
+.ProseMirror table td,
+.ProseMirror table th {
+  border: 1px solid;
+  @apply border-zinc-300 dark:border-zinc-700;
+  padding: 0.45em 0.7em;
+  vertical-align: top;
+  position: relative;
+  min-width: 1em;
+}
+.ProseMirror table th {
+  font-weight: 600;
+  @apply bg-zinc-50 dark:bg-zinc-900;
+  text-align: left;
+}
+.ProseMirror table .selectedCell {
+  @apply bg-violet-100 dark:bg-violet-500/20;
+}
+.ProseMirror table p {
+  margin: 0;
+}
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  @apply bg-violet-500/40;
+  pointer-events: none;
+}
+.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
