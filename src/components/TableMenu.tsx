@@ -65,7 +65,7 @@ export function TableMenu({ editor }: Props) {
   if (!editor || state.kind === 'hidden') return null
 
   const btn =
-    'px-2 py-1 text-xs rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-violet-50 dark:hover:bg-violet-900/30 hover:border-violet-300 dark:hover:border-violet-700 shadow-sm whitespace-nowrap'
+    'px-2.5 py-1 text-[11px] rounded-md bg-paper border border-line text-ink-2 hover:bg-accent-soft hover:text-accent-ink hover:border-line-2 shadow-sm whitespace-nowrap transition'
 
   return (
     <div
@@ -104,7 +104,7 @@ export function TableMenu({ editor }: Props) {
         >
           ✕ Row
         </button>
-        <span className="w-px bg-zinc-200 dark:bg-zinc-700" />
+        <span className="w-px bg-line self-stretch" />
         <button
           type="button"
           className={btn}
@@ -132,7 +132,7 @@ export function TableMenu({ editor }: Props) {
         >
           ✕ Col
         </button>
-        <span className="w-px bg-zinc-200 dark:bg-zinc-700" />
+        <span className="w-px bg-line self-stretch" />
         <button
           type="button"
           className={btn}

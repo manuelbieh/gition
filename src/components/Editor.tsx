@@ -155,7 +155,7 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     content: '',
     editorProps: {
       attributes: {
-        class: 'prose prose-zinc dark:prose-invert max-w-none focus:outline-none min-h-[60vh]',
+        class: 'prose-gi max-w-none focus:outline-none min-h-[60vh]',
       },
       handlePaste(_view, event) {
         const files = filesFromDataTransfer(event.clipboardData)
@@ -392,21 +392,26 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="flex items-center justify-between gap-3 px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 bg-white/95 dark:bg-zinc-950/95 backdrop-blur z-10">
+      <header className="flex items-center justify-between gap-3 px-6 py-3 border-b border-line sticky top-0 bg-paper/95 backdrop-blur-sm z-10">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-xs uppercase tracking-wider text-zinc-500">Editing</span>
-          <span className="font-medium truncate">{displayName(filePath)}</span>
+          <span className="gi-chip">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+            Editing
+          </span>
+          <span className="font-display font-display-sm text-[15px] text-ink truncate">
+            {displayName(filePath)}
+          </span>
           {statusBadge}
           {uploadCount > 0 && (
-            <span className="text-xs text-violet-600">
-              · uploading {uploadCount} file{uploadCount > 1 ? 's' : ''}…
+            <span className="text-[11px] text-accent">
+              uploading {uploadCount} file{uploadCount > 1 ? 's' : ''}…
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
           {publishState.phase === 'error' && (
             <span
-              className="text-xs text-red-600 max-w-xs truncate"
+              className="text-[11px] text-red-600 max-w-xs truncate"
               title={publishState.message}
             >
               publish failed
@@ -418,39 +423,36 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
                 href={publishState.result.url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-violet-600 hover:underline"
+                className="text-[11px] text-accent hover:underline"
               >
                 PR #{publishState.result.number} opened
               </a>
             )}
           {publishState.phase === 'done' &&
             publishState.result.kind === 'nothing-to-publish' && (
-              <span className="text-xs text-zinc-500">nothing to publish</span>
+              <span className="text-[11px] text-muted">nothing to publish</span>
             )}
           <button
             onClick={onSaveNow}
             disabled={autosave.phase === 'saving' || !dirty}
-            className="px-3 py-1.5 rounded text-sm bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className="gi-button gi-button-ghost"
           >
             {autosave.phase === 'saving' ? 'Saving…' : 'Save draft'}
           </button>
           <button
             onClick={onPublish}
             disabled={publishState.phase === 'publishing'}
-            className="px-3 py-1.5 rounded text-sm bg-violet-600 text-white font-medium hover:bg-violet-500 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 disabled:cursor-not-allowed transition"
+            className="gi-button gi-button-accent"
           >
             {publishState.phase === 'publishing' ? 'Publishing…' : 'Publish'}
           </button>
-          <button
-            onClick={onExit}
-            className="px-3 py-1.5 rounded text-sm bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-700"
-          >
+          <button onClick={onExit} className="gi-button gi-button-quiet">
             Done
           </button>
         </div>
       </header>
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-12 py-10 relative">
+        <div className="mx-auto max-w-[760px] px-14 py-14 relative gi-fade-in">
           <FrontmatterControls
             frontmatter={frontmatter}
             fallbackTitle={displayName(filePath)}
@@ -470,14 +472,14 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
 
 function renderStatusBadge(state: AutosaveState, dirty: boolean) {
   if (state.phase === 'pending')
-    return <span className="text-xs text-amber-600 dark:text-amber-400">· unsaved</span>
+    return <span className="text-[11px] text-accent">· unsaved</span>
   if (state.phase === 'saving')
-    return <span className="text-xs text-violet-600">· saving…</span>
+    return <span className="text-[11px] text-accent">· saving…</span>
   if (state.phase === 'saved' && !dirty)
-    return <span className="text-xs text-emerald-600">· saved to draft</span>
+    return <span className="text-[11px] text-emerald-600">· saved to draft</span>
   if (state.phase === 'error')
     return (
-      <span className="text-xs text-red-600 max-w-xs truncate" title={state.message}>
+      <span className="text-[11px] text-red-600 max-w-xs truncate" title={state.message}>
         · save error
       </span>
     )

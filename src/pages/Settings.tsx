@@ -111,19 +111,28 @@ export function Settings() {
     draft.homepage !== config.data?.homepage
 
   return (
-    <div className="min-h-screen flex justify-center px-6 py-16">
-      <div className="w-full max-w-xl">
+    <div className="min-h-screen flex justify-center px-6 py-20">
+      <div className="w-full max-w-xl gi-fade-in">
         <button
           onClick={() => navigate(`/${owner}/${repo}`)}
-          className="text-xs uppercase tracking-wider text-zinc-500 hover:text-violet-600 mb-2"
+          className="text-[11px] uppercase tracking-[0.22em] text-muted hover:text-ink transition mb-3"
         >
           ← back to wiki
         </button>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Wiki settings</h1>
-        <p className="text-sm text-zinc-500 mb-8">
-          These settings are stored in <code className="font-mono">{CONFIG_FILENAME}</code> at the
-          root of <code className="font-mono">{owner}/{repo}</code>. Saving here commits the file
-          via the same draft-and-publish flow used for pages.
+        <h1 className="font-display text-[40px] leading-tight mb-3 text-ink">
+          Wiki settings
+        </h1>
+        <p className="text-sm text-ink-2 mb-10 leading-relaxed">
+          Stored in{' '}
+          <code className="font-mono text-[12.5px] bg-paper-2 border border-line px-1.5 py-0.5 rounded">
+            {CONFIG_FILENAME}
+          </code>{' '}
+          at the root of{' '}
+          <code className="font-mono text-[12.5px] text-ink-2">
+            {owner}/{repo}
+          </code>
+          . Saving commits the file via the same draft-and-publish flow used
+          for pages.
         </p>
 
         <div className="space-y-6">
@@ -135,7 +144,7 @@ export function Settings() {
               type="text"
               value={draft.contentPath}
               onChange={(e) => onChange('contentPath', e.target.value)}
-              className="w-full px-3 py-2 rounded bg-zinc-100 dark:bg-zinc-900 outline-none focus:ring-2 focus:ring-violet-500"
+              className="gi-input w-full font-mono"
               placeholder="content"
             />
           </Field>
@@ -149,7 +158,7 @@ export function Settings() {
               onChange={(e) =>
                 onChange('defaultBranch', e.target.value.trim() || null)
               }
-              className="w-full px-3 py-2 rounded bg-zinc-100 dark:bg-zinc-900 outline-none focus:ring-2 focus:ring-violet-500"
+              className="gi-input w-full font-mono"
               placeholder={meta.data?.default_branch ?? 'main'}
             />
           </Field>
@@ -161,17 +170,17 @@ export function Settings() {
               type="text"
               value={draft.homepage ?? ''}
               onChange={(e) => onChange('homepage', e.target.value.trim() || null)}
-              className="w-full px-3 py-2 rounded bg-zinc-100 dark:bg-zinc-900 outline-none focus:ring-2 focus:ring-violet-500"
+              className="gi-input w-full font-mono"
               placeholder="index"
             />
           </Field>
         </div>
 
-        <div className="mt-8 flex items-center gap-3">
+        <div className="mt-10 flex items-center gap-3">
           <button
             disabled={!dirty || saveAndPublish.isPending}
             onClick={() => saveAndPublish.mutate(draft)}
-            className="px-4 py-2 rounded bg-violet-600 text-white font-medium hover:bg-violet-500 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 disabled:cursor-not-allowed transition"
+            className="gi-button gi-button-accent"
           >
             {saveAndPublish.isPending ? 'Saving…' : 'Save & publish'}
           </button>
@@ -200,9 +209,9 @@ function Field({
 }) {
   return (
     <label className="block">
-      <div className="text-sm font-medium mb-1">{label}</div>
+      <div className="text-[13px] font-medium mb-1.5 text-ink">{label}</div>
       {children}
-      <div className="text-xs text-zinc-500 mt-1">{help}</div>
+      <div className="text-[11.5px] text-muted mt-1.5">{help}</div>
     </label>
   )
 }
@@ -216,17 +225,17 @@ function SuccessHint({ result }: { result: PublishResult }) {
         href={result.url}
         target="_blank"
         rel="noreferrer"
-        className="text-xs text-violet-600 hover:underline"
+        className="text-xs text-accent hover:underline"
       >
         PR #{result.number} opened
       </a>
     )
-  return <span className="text-xs text-zinc-500">Nothing to publish</span>
+  return <span className="text-xs text-muted">Nothing to publish</span>
 }
 
 function FullPageMsg({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex items-center justify-center text-zinc-500">
+    <div className="min-h-screen flex items-center justify-center text-muted text-sm">
       {children}
     </div>
   )

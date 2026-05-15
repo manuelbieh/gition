@@ -26,7 +26,6 @@ export function SearchPalette({
   const [hits, setHits] = useState<SearchHit[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // On open: focus + maybe kick off a rebuild
   useEffect(() => {
     if (!open) {
       setQuery('')
@@ -74,15 +73,15 @@ export function SearchPalette({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/30 dark:bg-black/60 flex items-start justify-center pt-32 px-4"
+      className="fixed inset-0 z-50 gi-modal-backdrop flex items-start justify-center pt-[18vh] px-4 gi-fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden"
+        className="w-full max-w-[560px] gi-floating overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
-          <svg width="16" height="16" viewBox="0 0 16 16" className="text-zinc-400">
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-line">
+          <svg width="15" height="15" viewBox="0 0 16 16" className="text-muted">
             <path
               fill="currentColor"
               d="M11.5 10h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L16.49 15zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"
@@ -94,14 +93,15 @@ export function SearchPalette({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search this wiki…"
-            className="flex-1 bg-transparent outline-none text-sm"
+            className="flex-1 bg-transparent outline-none text-[14px] text-ink placeholder:text-hush"
           />
-          <span className="text-[10px] text-zinc-500">esc</span>
+          <span className="gi-kbd">esc</span>
         </div>
 
-        <div className="max-h-80 overflow-y-auto">
+        <div className="max-h-[60vh] overflow-y-auto">
           {state.phase === 'loading' && (
-            <div className="px-4 py-6 text-sm text-zinc-500">
+            <div className="px-4 py-8 text-sm text-muted flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full border border-line-2 border-t-accent animate-spin" />
               Indexing… {state.loaded}/{state.total}
             </div>
           )}
@@ -117,18 +117,23 @@ export function SearchPalette({
             </div>
           )}
           {state.phase === 'ready' && query && hits.length === 0 && (
-            <div className="px-4 py-6 text-sm text-zinc-500">No matches</div>
+            <div className="px-4 py-8 text-sm text-muted">No matches</div>
+          )}
+          {state.phase === 'ready' && !query && (
+            <div className="px-4 py-8 text-sm text-muted">
+              Type to search across all pages.
+            </div>
           )}
           {state.phase === 'ready' && hits.length > 0 && (
-            <ul className="py-1">
+            <ul className="py-1.5">
               {hits.map((h, i) => (
                 <li
                   key={h.id}
                   className={clsx(
-                    'px-4 py-2 cursor-pointer',
+                    'mx-1.5 px-3 py-2 rounded-md cursor-pointer transition-colors',
                     i === active
-                      ? 'bg-violet-100 dark:bg-violet-500/15'
-                      : 'hover:bg-zinc-100 dark:hover:bg-zinc-800',
+                      ? 'bg-accent-soft'
+                      : 'hover:bg-paper-2',
                   )}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => {
@@ -136,24 +141,35 @@ export function SearchPalette({
                     onClose()
                   }}
                 >
-                  <div className="font-medium text-sm truncate">{h.title}</div>
-                  <div className="text-xs text-zinc-500 truncate">{h.snippet}</div>
+                  <div className="font-display font-display-sm text-[14px] text-ink truncate">
+                    {h.title}
+                  </div>
+                  <div className="text-[11px] text-muted truncate mt-0.5 font-mono">
+                    {h.snippet}
+                  </div>
                 </li>
               ))}
             </ul>
           )}
           {state.phase === 'idle' && (
-            <div className="px-4 py-6 text-sm text-zinc-500">
+            <div className="px-4 py-8 text-sm text-muted">
               <button onClick={onRebuild} className="underline hover:no-underline">
                 Build search index
               </button>
             </div>
           )}
         </div>
-        <div className="px-4 py-2 text-[10px] text-zinc-500 border-t border-zinc-200 dark:border-zinc-800 flex gap-3">
-          <span>↑↓ navigate</span>
-          <span>↵ open</span>
-          <span>esc close</span>
+        <div className="px-4 py-2.5 text-[11px] text-muted border-t border-line flex gap-4">
+          <span className="flex items-center gap-1.5">
+            <span className="gi-kbd">↑</span>
+            <span className="gi-kbd">↓</span> navigate
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="gi-kbd">↵</span> open
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="gi-kbd">esc</span> close
+          </span>
         </div>
       </div>
     </div>

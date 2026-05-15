@@ -126,24 +126,25 @@ export function Wiki() {
 
   return (
     <div className="flex h-screen">
-      <aside className="w-72 shrink-0 border-r border-zinc-200 dark:border-zinc-800 overflow-y-auto bg-zinc-50/50 dark:bg-zinc-900/30">
-        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 bg-zinc-50/95 dark:bg-zinc-900/80 backdrop-blur z-10">
+      <aside className="w-[264px] shrink-0 border-r border-line overflow-y-auto bg-paper-2/60">
+        <div className="px-4 pt-5 pb-3 sticky top-0 bg-paper-2/95 backdrop-blur-sm z-10 border-b border-line">
           <button
             onClick={() => navigate('/')}
-            className="text-xs uppercase tracking-wider text-zinc-500 hover:text-violet-600 mb-1"
+            className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted hover:text-ink transition mb-3"
           >
+            <span className="w-1.5 h-1.5 rounded-full bg-accent" />
             gition
           </button>
           <WikiSwitcher owner={owner} repo={repo} />
           <button
             onClick={() => setSearchOpen(true)}
-            className="mt-3 w-full flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 px-2 py-1.5 rounded bg-white dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 transition"
+            className="mt-3 w-full flex items-center gap-2 text-[12px] text-ink-2 hover:text-ink px-2.5 py-1.5 rounded-md bg-paper border border-line hover:border-line-2 transition"
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" className="text-zinc-400">
+            <svg width="13" height="13" viewBox="0 0 16 16" className="text-muted">
               <path fill="currentColor" d="M11.5 10h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L16.49 15zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z" />
             </svg>
             <span>Search</span>
-            <span className="ml-auto text-[10px] text-zinc-400">⌘K</span>
+            <span className="ml-auto gi-kbd">⌘K</span>
           </button>
         </div>
         <Sidebar
@@ -224,7 +225,7 @@ function findHomePage(
 
 function FullPageMessage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex items-center justify-center text-zinc-500">
+    <div className="min-h-screen flex items-center justify-center text-muted text-sm">
       {children}
     </div>
   )

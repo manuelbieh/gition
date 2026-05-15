@@ -23,72 +23,103 @@ export function Landing() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 relative">
-      {oauthAvailable && (
-        <div className="absolute top-4 right-6 text-xs">
-          {authKind === 'oauth' ? (
-            <span className="inline-flex items-center gap-1.5 text-emerald-600">
+    <div className="min-h-screen flex flex-col">
+      {/* Top bar */}
+      <header className="flex items-center justify-between px-8 py-5">
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted">
+          <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+          gition
+        </div>
+        {oauthAvailable &&
+          (authKind === 'oauth' ? (
+            <span className="inline-flex items-center gap-2 text-xs text-ink-2">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               Signed in
             </span>
           ) : (
             <button
               onClick={() => beginOAuth(location.pathname + location.search)}
-              className="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition"
+              className="text-xs text-muted hover:text-ink transition"
             >
               Sign in with GitHub →
             </button>
+          ))}
+      </header>
+
+      {/* Hero */}
+      <main className="flex-1 flex items-center justify-center px-6">
+        <div className="w-full max-w-xl gi-fade-in">
+          <div className="mb-6 text-[11px] uppercase tracking-[0.22em] text-muted">
+            wikis, bound to GitHub
+          </div>
+          <h1 className="font-display text-[64px] leading-[0.95] mb-4 text-ink">
+            Write{' '}
+            <span className="font-display-italic text-accent">together,</span>
+            <br /> stored as markdown.
+          </h1>
+          <p className="text-ink-2 mb-10 max-w-md text-[15px] leading-relaxed">
+            Open any GitHub repository as a Notion-style wiki. Read it
+            anonymously, sign in to edit. Your content lives as markdown —
+            yours, portable, version-controlled.
+          </p>
+
+          <form onSubmit={onSubmit} className="flex gap-2 mb-3">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="owner/repo or github.com/owner/repo"
+              className="gi-input flex-1"
+              autoFocus
+            />
+            <button type="submit" className="gi-button gi-button-accent">
+              Open →
+            </button>
+          </form>
+          {oauthAvailable && authKind !== 'oauth' && (
+            <p className="text-xs text-muted">
+              Public repos open without signing in. Sign in for private repos
+              and to edit.
+            </p>
+          )}
+
+          {recents.length > 0 && (
+            <div className="mt-14">
+              <div className="text-[10px] uppercase tracking-[0.22em] text-muted mb-3">
+                Recent
+              </div>
+              <ul className="space-y-px">
+                {recents.slice(0, 8).map((r) => (
+                  <li key={r}>
+                    <Link
+                      to={`/${r}`}
+                      className="group flex items-center justify-between px-3 py-2 -mx-3 rounded-md hover:bg-paper-2 transition text-ink-2 hover:text-ink"
+                    >
+                      <span className="font-mono text-[13px]">{r}</span>
+                      <span className="text-muted text-xs opacity-0 group-hover:opacity-100 transition">
+                        Open →
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
-      )}
-      <div className="w-full max-w-xl">
-        <h1 className="text-4xl font-semibold tracking-tight mb-2">
-          gition
-        </h1>
-        <p className="text-zinc-500 dark:text-zinc-400 mb-8">
-          Open any GitHub repo as a Notion-style wiki.
-        </p>
-        <form onSubmit={onSubmit} className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="owner/repo or github.com/owner/repo"
-            className="flex-1 px-4 py-3 rounded-lg bg-zinc-100 dark:bg-zinc-900 outline-none focus:ring-2 focus:ring-violet-500"
-            autoFocus
-          />
-          <button
-            type="submit"
-            className="px-5 py-3 rounded-lg bg-violet-600 text-white font-medium hover:bg-violet-500 transition"
-          >
-            Open
-          </button>
-        </form>
-        {oauthAvailable && authKind !== 'oauth' && (
-          <p className="mt-3 text-xs text-zinc-500">
-            Public repos work without signing in. Sign in for private repos or to edit.
-          </p>
-        )}
-        {recents.length > 0 && (
-          <div className="mt-10">
-            <div className="text-xs uppercase tracking-wider text-zinc-500 mb-3">
-              Recent
-            </div>
-            <ul className="space-y-1">
-              {recents.slice(0, 8).map((r) => (
-                <li key={r}>
-                  <Link
-                    to={`/${r}`}
-                    className="text-zinc-700 dark:text-zinc-300 hover:text-violet-600 dark:hover:text-violet-400"
-                  >
-                    {r}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="px-8 py-6 text-[11px] uppercase tracking-[0.18em] text-hush flex items-center justify-between">
+        <span>Markdown · GitHub · no servers</span>
+        <a
+          href="https://github.com/manuelbieh/gition"
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-ink transition"
+        >
+          source ↗
+        </a>
+      </footer>
     </div>
   )
 }

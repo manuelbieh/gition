@@ -11,8 +11,6 @@ import { displayName } from '../lib/slug'
 import { relativeTime } from '../lib/presence'
 import type { DraftActivity } from '../lib/draftBranch'
 
-// gray-matter ships a CJS bundle that expects a Node Buffer global; polyfill it
-// for the browser. Vite tree-shakes this if matter isn't used elsewhere.
 ;(globalThis as unknown as { Buffer?: typeof Buffer }).Buffer ??= Buffer
 
 type Props = {
@@ -57,8 +55,6 @@ export function PageView({ ref, filePath, wiki, presence, onEdit }: Props) {
         if (!href) return <a {...rest}>{children}</a>
         const handled = resolveLink(href, filePath, wiki, params.owner!, params.repo!, ref)
         if (handled.type === 'internal') {
-          // Internal SPA route: prepend BASE_URL so middle-click / copy-link
-          // produces a working URL on hosted deploys with a basename.
           const basenameClean = import.meta.env.BASE_URL.replace(/\/$/, '')
           const fullHref = `${basenameClean}${handled.href}`
           return (
@@ -99,11 +95,11 @@ export function PageView({ ref, filePath, wiki, presence, onEdit }: Props) {
   )
 
   if (file.isLoading) {
-    return <div className="p-12 text-zinc-500">Loading page…</div>
+    return <div className="p-12 text-muted text-sm">Loading page…</div>
   }
   if (file.error) {
     return (
-      <div className="p-12 text-red-600">
+      <div className="p-12 text-red-600 text-sm">
         Error loading page: {(file.error as Error).message}
       </div>
     )
@@ -111,46 +107,56 @@ export function PageView({ ref, filePath, wiki, presence, onEdit }: Props) {
   if (!parsed) return null
 
   const title = (parsed.frontmatter.title as string | undefined) ?? displayName(filePath)
+  const icon = typeof parsed.frontmatter.icon === 'string' ? parsed.frontmatter.icon : null
 
   return (
-    <article className="mx-auto max-w-3xl px-12 py-16 relative">
+    <article className="mx-auto max-w-[760px] px-14 py-16 relative gi-fade-in">
       {onEdit && (
         <button
           onClick={onEdit}
-          className="absolute top-6 right-6 px-3 py-1.5 rounded text-sm bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 transition"
+          className="absolute top-8 right-8 gi-button gi-button-ghost text-[12px]"
         >
           Edit
         </button>
       )}
-      <header className="mb-8">
-        {typeof parsed.frontmatter.icon === 'string' && (
-          <div className="text-5xl mb-3">{parsed.frontmatter.icon}</div>
+      <header className="mb-10">
+        {icon && (
+          <div className="text-[56px] leading-none mb-5 select-none">{icon}</div>
         )}
-        <h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          {title}
-        </h1>
+        <h1 className="font-display text-[52px] leading-[1.05] text-ink">{title}</h1>
+        {typeof parsed.frontmatter.description === 'string' && (
+          <p className="mt-3 text-ink-2 text-[15px] leading-relaxed">
+            {parsed.frontmatter.description}
+          </p>
+        )}
         {presence && presence.length > 0 && (
-          <div className="mt-4 flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-3 py-2 text-sm">
-            <div className="flex -space-x-1.5">
+          <div className="mt-6 flex items-center gap-3 rounded-lg bg-accent-soft border border-line px-3.5 py-2.5">
+            <div className="flex -space-x-2">
               {presence.slice(0, 3).map((d) => (
                 <img
                   key={d.username}
                   src={d.authorAvatarUrl ?? ''}
                   alt={d.username}
-                  className="w-6 h-6 rounded-full ring-2 ring-amber-50 dark:ring-amber-950"
+                  className="w-6 h-6 rounded-full ring-2 ring-paper"
                   title={`@${d.username} · ${relativeTime(d.lastCommitAt)}`}
                 />
               ))}
             </div>
-            <span className="text-amber-800 dark:text-amber-200 text-xs">
-              {presence.length === 1
-                ? `@${presence[0].username} has unpublished changes here · ${relativeTime(presence[0].lastCommitAt)}`
-                : `${presence.length} people have drafts on this page`}
+            <span className="text-[12px] text-accent-ink flex-1">
+              {presence.length === 1 ? (
+                <>
+                  <span className="font-medium">@{presence[0].username}</span>{' '}
+                  has unpublished changes here ·{' '}
+                  {relativeTime(presence[0].lastCommitAt)}
+                </>
+              ) : (
+                `${presence.length} drafts on this page`
+              )}
             </span>
             {presence.length === 1 && (
               <a
                 href={`?branch=${encodeURIComponent(presence[0].branch)}`}
-                className="ml-auto text-xs text-amber-900 dark:text-amber-200 underline hover:no-underline"
+                className="text-[11px] text-accent-ink underline underline-offset-2 hover:no-underline"
               >
                 View draft
               </a>
@@ -158,7 +164,7 @@ export function PageView({ ref, filePath, wiki, presence, onEdit }: Props) {
           </div>
         )}
       </header>
-      <div className="prose prose-zinc dark:prose-invert max-w-none prose-headings:font-semibold prose-headings:tracking-tight prose-a:text-violet-600 dark:prose-a:text-violet-400 prose-a:no-underline hover:prose-a:underline">
+      <div className="prose-gi">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
           {parsed.body}
         </ReactMarkdown>
@@ -180,23 +186,15 @@ function resolveLink(
   repo: string,
   ref: RepoRef,
 ): ResolvedLink {
-  // External (http://, mailto:, etc.)
   if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return { type: 'external' }
-  // Anchor-only
   if (href.startsWith('#')) return { type: 'external' }
-
   const resolvedRepoPath = resolveRelativeRepoPath(fromRepoPath, href)
-
-  // If it's an internal markdown link to a known page, route via SPA
   if (resolvedRepoPath.toLowerCase().endsWith('.md')) {
     const slug = wiki.byRepoPath.get(resolvedRepoPath)
     if (slug) {
       return { type: 'internal', href: `/${owner}/${repo}/${slug}` }
     }
-    // Unknown page — fall through to external view of the source
   }
-
-  // Otherwise treat as an asset (image, pdf, etc.)
   return { type: 'asset', href: rawUrl(ref, resolvedRepoPath) }
 }
 
@@ -206,8 +204,6 @@ function resolveImage(src: string, fromRepoPath: string, ref: RepoRef): string {
   return rawUrl(ref, resolved)
 }
 
-// Notion exports include the page title as a leading `# Heading` in the body.
-// We render our own title in the page header, so drop the duplicate.
 function stripLeadingTitleHeading(body: string, title: string): string {
   const trimmed = body.replace(/^\s+/, '')
   const match = trimmed.match(/^# +(.+?)\s*\n+/)

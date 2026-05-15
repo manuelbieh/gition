@@ -18,7 +18,6 @@ export function AuthCallback() {
     const installationId = params.get('installation_id')
     const setupAction = params.get('setup_action')
 
-    // OAuth user-authorization callback (the one we initiated with state)
     if (code && state) {
       completeOAuth(code, state)
         .then(() => {
@@ -29,8 +28,6 @@ export function AuthCallback() {
       return
     }
 
-    // GitHub App installation callback — App was installed/updated but no
-    // OAuth flow was in progress, so there's no `code`. Friendly confirm.
     if (installationId && (setupAction === 'install' || setupAction === 'update')) {
       setStatus({ kind: 'installed', installationId })
       return
@@ -45,18 +42,31 @@ export function AuthCallback() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
-      <div className="w-full max-w-md text-center">
-        {status.kind === 'pending' && <p className="text-zinc-500">Signing in…</p>}
+      <div className="w-full max-w-md text-center gi-fade-in">
+        {status.kind === 'pending' && (
+          <>
+            <div className="inline-flex items-center gap-2 text-sm text-muted">
+              <span className="w-3 h-3 rounded-full border border-line-2 border-t-accent animate-spin" />
+              Signing in…
+            </div>
+          </>
+        )}
         {status.kind === 'installed' && (
           <>
-            <h2 className="text-xl font-semibold mb-2">GitHub App installed</h2>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-6">
-              Installation #{status.installationId} is set up. To actually
-              sign in, return to gition and click "Sign in with GitHub".
+            <div className="mb-4 inline-flex w-10 h-10 items-center justify-center rounded-full bg-accent-soft text-accent">
+              ✓
+            </div>
+            <h2 className="font-display text-2xl mb-2 text-ink">
+              GitHub App installed
+            </h2>
+            <p className="text-sm text-ink-2 mb-6">
+              Installation #{status.installationId} is set up. Return to gition
+              and click <span className="font-medium">Sign in with GitHub</span>{' '}
+              to authorize the session.
             </p>
             <button
               onClick={() => navigate('/')}
-              className="px-4 py-2 rounded bg-violet-600 text-white font-medium"
+              className="gi-button gi-button-accent"
             >
               Back to gition
             </button>
@@ -64,11 +74,13 @@ export function AuthCallback() {
         )}
         {status.kind === 'error' && (
           <>
-            <h2 className="text-xl font-semibold mb-2">Sign-in failed</h2>
-            <p className="text-sm text-red-600 mb-4">{status.message}</p>
+            <h2 className="font-display text-2xl mb-2 text-ink">
+              Sign-in failed
+            </h2>
+            <p className="text-sm text-red-600 mb-6">{status.message}</p>
             <button
               onClick={() => navigate('/')}
-              className="px-4 py-2 rounded bg-zinc-200 dark:bg-zinc-800"
+              className="gi-button gi-button-ghost"
             >
               Back to start
             </button>

@@ -26,8 +26,8 @@ export function FrontmatterControls({ frontmatter, fallbackTitle, onChange }: Pr
   }
 
   return (
-    <div className="mb-8">
-      <div className="flex items-start gap-3">
+    <div className="mb-10">
+      <div className="flex items-start gap-4">
         <IconPicker
           value={iconVal}
           open={iconOpen}
@@ -43,26 +43,27 @@ export function FrontmatterControls({ frontmatter, fallbackTitle, onChange }: Pr
             value={titleVal}
             onChange={(e) => set('title', e.target.value)}
             placeholder={fallbackTitle}
-            className="w-full text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 bg-transparent outline-none placeholder:text-zinc-300 dark:placeholder:text-zinc-700"
+            className="font-display w-full text-[52px] leading-[1.05] text-ink bg-transparent outline-none placeholder:text-hush"
           />
         </div>
       </div>
-      <div className="mt-2 flex items-center gap-3 text-xs text-zinc-500">
-        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+      <div className="mt-4 flex items-center gap-4 text-xs text-muted">
+        <label className="inline-flex items-center gap-2 cursor-pointer hover:text-ink-2 transition">
           <input
             type="checkbox"
             checked={draftVal}
             onChange={(e) => set('draft', e.target.checked || undefined)}
-            className="rounded accent-violet-600"
+            className="w-3.5 h-3.5 rounded-sm accent-accent"
+            style={{ accentColor: 'var(--accent)' }}
           />
           Hide from sidebar (draft)
         </label>
         {titleVal && titleVal !== fallbackTitle && (
           <button
             onClick={() => set('title', undefined)}
-            className="hover:text-zinc-900 dark:hover:text-zinc-200 transition"
+            className="hover:text-ink transition"
           >
-            Reset title to filename
+            Reset title
           </button>
         )}
       </div>
@@ -109,22 +110,27 @@ function IconPicker({
       <button
         onClick={() => onOpenChange(!open)}
         className={clsx(
-          'shrink-0 flex items-center justify-center transition',
+          'shrink-0 flex items-center justify-center transition rounded-md',
           value
-            ? 'w-14 h-14 text-5xl hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded'
-            : 'h-7 px-2 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 mt-2',
+            ? 'w-[68px] h-[68px] text-[56px] leading-none hover:bg-paper-2 -ml-1'
+            : 'h-7 px-2.5 text-xs text-muted hover:text-ink hover:bg-paper-2 mt-3 border border-line gap-1.5',
         )}
       >
-        {value || '+ Add icon'}
+        {value || (
+          <>
+            <span>＋</span>
+            <span>Add icon</span>
+          </>
+        )}
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-30 w-72 p-3 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-lg">
+        <div className="absolute left-0 top-full mt-2 z-30 w-80 p-4 gi-floating">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type an emoji or paste one"
-            className="w-full mb-3 px-3 py-2 rounded bg-zinc-100 dark:bg-zinc-800 outline-none text-sm"
+            className="gi-input w-full mb-3"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter' && input.trim()) {
@@ -137,7 +143,7 @@ function IconPicker({
               <button
                 key={emoji}
                 onClick={() => onPick(emoji)}
-                className="w-8 h-8 flex items-center justify-center text-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
+                className="w-9 h-9 flex items-center justify-center text-xl hover:bg-paper-2 rounded-md transition"
               >
                 {emoji}
               </button>
@@ -146,7 +152,7 @@ function IconPicker({
           {value && (
             <button
               onClick={() => onPick('')}
-              className="mt-3 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+              className="mt-3 text-xs text-muted hover:text-ink transition"
             >
               Remove icon
             </button>

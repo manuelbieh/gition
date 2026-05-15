@@ -12,7 +12,7 @@ type Props = {
 
 export function Sidebar({ root, activeSlug, presence, onNavigate }: Props) {
   return (
-    <nav className="py-2 text-sm">
+    <nav className="py-2 text-[13px]">
       {root.children.map((child) => (
         <NodeRow
           key={child.slugPath.join('/')}
@@ -45,6 +45,7 @@ function NodeRow({
   const isAncestor = activeSlug.startsWith(slug + '/')
   const hasChildren = node.children.length > 0
   const [open, setOpen] = useState(() => isActive || isAncestor)
+  const hasDraft = node.filePath ? !!presence?.get(node.filePath) : false
 
   function handleClick(e: React.MouseEvent) {
     e.preventDefault()
@@ -60,41 +61,45 @@ function NodeRow({
     <>
       <div
         className={clsx(
-          'group flex items-center gap-1 pr-2 py-[3px] cursor-pointer rounded transition-colors',
+          'group relative flex items-center gap-1 pr-3 py-[3px] cursor-pointer transition-colors',
           isActive
-            ? 'bg-violet-100 dark:bg-violet-500/15 text-violet-900 dark:text-violet-200'
-            : 'hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300',
+            ? 'text-ink'
+            : 'text-ink-2 hover:text-ink hover:bg-paper-2',
         )}
-        style={{ paddingLeft: 8 + depth * 14 }}
+        style={{ paddingLeft: 14 + depth * 14 }}
         onClick={handleClick}
       >
+        {isActive && (
+          <span className="absolute left-0 top-1 bottom-1 w-[2px] bg-accent rounded-r" />
+        )}
         {hasChildren ? (
           <button
             onClick={(e) => {
               e.stopPropagation()
               setOpen((v) => !v)
             }}
-            className="w-4 h-4 flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 shrink-0"
+            className="w-3.5 h-3.5 flex items-center justify-center text-hush hover:text-ink-2 shrink-0 -ml-1"
             aria-label={open ? 'Collapse' : 'Expand'}
           >
             <Chevron open={open} />
           </button>
         ) : (
-          <span className="w-4 h-4 shrink-0" />
+          <span className="w-3.5 h-3.5 shrink-0 -ml-1" />
         )}
         <span
           className={clsx(
             'truncate flex-1',
-            !node.filePath && 'text-zinc-500 dark:text-zinc-400',
+            !node.filePath && 'text-muted',
+            isActive && 'font-medium',
           )}
         >
           {node.title}
         </span>
-        {node.filePath && presence?.get(node.filePath) && (
+        {hasDraft && (
           <span
-            className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"
-            title={`${presence.get(node.filePath)!.length} draft${
-              presence.get(node.filePath)!.length > 1 ? 's' : ''
+            className="w-1.5 h-1.5 rounded-full bg-accent shrink-0"
+            title={`${presence?.get(node.filePath!)?.length ?? 0} draft${
+              (presence?.get(node.filePath!)?.length ?? 0) > 1 ? 's' : ''
             }`}
           />
         )}
@@ -117,13 +122,22 @@ function NodeRow({
 function Chevron({ open }: { open: boolean }) {
   return (
     <svg
-      width="10"
-      height="10"
+      width="9"
+      height="9"
       viewBox="0 0 10 10"
       fill="none"
-      style={{ transform: `rotate(${open ? 90 : 0}deg)`, transition: 'transform 0.15s' }}
+      style={{
+        transform: `rotate(${open ? 90 : 0}deg)`,
+        transition: 'transform 0.15s ease',
+      }}
     >
-      <path d="M3 1l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M3 1l4 4-4 4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
