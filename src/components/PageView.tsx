@@ -57,11 +57,16 @@ export function PageView({ ref, filePath, wiki, presence, onEdit }: Props) {
         if (!href) return <a {...rest}>{children}</a>
         const handled = resolveLink(href, filePath, wiki, params.owner!, params.repo!, ref)
         if (handled.type === 'internal') {
+          // Internal SPA route: prepend BASE_URL so middle-click / copy-link
+          // produces a working URL on hosted deploys with a basename.
+          const basenameClean = import.meta.env.BASE_URL.replace(/\/$/, '')
+          const fullHref = `${basenameClean}${handled.href}`
           return (
             <a
               {...rest}
-              href={handled.href}
+              href={fullHref}
               onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.button === 1) return
                 e.preventDefault()
                 navigate(handled.href)
               }}
