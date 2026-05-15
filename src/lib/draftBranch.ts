@@ -173,7 +173,12 @@ export async function compareBranches(
   ref: RepoRef,
   base: string,
   head: string,
-): Promise<{ status: CompareStatus; ahead_by: number; behind_by: number }> {
+): Promise<{
+  status: CompareStatus
+  ahead_by: number
+  behind_by: number
+  headCommitSha: string | null
+}> {
   const res = await ghFetch(
     `/repos/${ref.owner}/${ref.repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
   )
@@ -181,8 +186,15 @@ export async function compareBranches(
     status: CompareStatus
     ahead_by: number
     behind_by: number
+    commits?: Array<{ sha: string }>
   }
-  return json
+  return {
+    status: json.status,
+    ahead_by: json.ahead_by,
+    behind_by: json.behind_by,
+    // For status='ahead', commits[ahead_by - 1] is the head of `head`
+    headCommitSha: json.commits?.[json.commits.length - 1]?.sha ?? null,
+  }
 }
 
 export type PublishResult =
@@ -202,15 +214,18 @@ export async function publishDraft(args: {
     return { kind: 'nothing-to-publish' }
   }
 
-  const draftHead = await getBranchHead(ref, draftBranch)
+  // IMPORTANT: do NOT GET the draft branch's ref here — GitHub's
+  // /git/ref endpoint has read-after-write inconsistency immediately
+  // after a force-PATCH, which silently returns the pre-update sha and
+  // causes us to "fast-forward" the target to its own existing HEAD
+  // (no-op). The compare response already includes the draft head as
+  // the last entry in commits[].
+  const draftHeadSha = cmp.headCommitSha
 
-  if (cmp.status === 'ahead') {
-    // Pure fast-forward
+  if (cmp.status === 'ahead' && draftHeadSha) {
     try {
-      await updateRef(ref, `heads/${targetBranch}`, draftHead.commitSha, false)
-      // Reset draft branch back to target (now they match)
-      // Skipped: target == draft after FF, no reset needed
-      return { kind: 'fast-forward', targetHeadSha: draftHead.commitSha }
+      await updateRef(ref, `heads/${targetBranch}`, draftHeadSha, false)
+      return { kind: 'fast-forward', targetHeadSha: draftHeadSha }
     } catch (err) {
       if (err instanceof GitHubError && err.status === 422) {
         // Race: target moved between compare and update; fall through to PR
