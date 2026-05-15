@@ -376,7 +376,15 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
         } catch (err) {
           console.warn('[gition] draft-branch reset failed (non-fatal)', err)
         }
-        sessionRef.current = null
+        // DO NOT clear sessionRef. GitHub's GET /git/ref is eventually
+        // consistent right after a force-PATCH; if we set session=null,
+        // the next autosave would GET a stale draft HEAD and commit
+        // with the wrong parent, causing divergence. Instead, anchor
+        // the next session at the freshly-published target HEAD.
+        sessionRef.current = {
+          rootSha: result.targetHeadSha,
+          lastCommitSha: result.targetHeadSha,
+        }
       }
       setPublishState({ phase: 'done', result })
       queryClient.invalidateQueries({
