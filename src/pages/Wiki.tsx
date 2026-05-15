@@ -9,12 +9,14 @@ import { PageView } from '../components/PageView'
 import { Editor } from '../components/Editor'
 import { AuthPrompt } from '../components/AuthPrompt'
 import { WikiSwitcher } from '../components/WikiSwitcher'
-import { GitHubError } from '../lib/github'
+import { GitHubError, fetchAuthedUser } from '../lib/github'
 import { getToken } from '../lib/auth'
 import { recordRecent } from '../lib/recents'
 import { usePresence } from '../lib/presence'
 import { useSearch } from '../lib/search'
 import { SearchPalette } from '../components/SearchPalette'
+import { useUnpublishedState } from '../lib/userContent'
+import { useIcons } from '../lib/icons'
 
 export function Wiki() {
   const params = useParams()
@@ -68,12 +70,35 @@ export function Wiki() {
   // Soft presence — only when authenticated (anonymous viewers don't get it)
   const presence = usePresence(ref, !!getToken())
 
-  // Search — uses the git tree's SHA as the cache key
+  // Per-user unpublished state — drives "view your own draft instead of target"
+  const me = useQuery({
+    queryKey: ['authedUser'],
+    queryFn: fetchAuthedUser,
+    enabled: !!getToken(),
+    staleTime: Infinity,
+  })
+  const unpublished = useUnpublishedState(ref, me.data?.login)
+
+  // For the current page, decide whether to read from target or the user's
+  // draft branch. If the file has unpublished work, prefer the draft.
+  const fileRef: RepoRef | undefined = useMemo(() => {
+    if (!ref) return undefined
+    if (!wiki || !config) return ref
+    const sp = decodeURIComponent(splat).replace(/^\/+|\/+$/g, '')
+    const fp = sp ? wiki.bySlug.get(sp) : findHomePage(wiki, config)
+    if (fp && unpublished.data?.changedFiles.includes(fp)) {
+      return { ...ref, branch: unpublished.data.branch }
+    }
+    return ref
+  }, [ref, splat, wiki, unpublished.data, config])
+
+  // Search + icons — share the tree-fingerprint cache key
   const treeSha = useMemo(() => {
     if (!tree.data || tree.data.length === 0) return undefined
     return tree.data.map((e) => e.sha).join('|').slice(0, 64)
   }, [tree.data])
   const searchApi = useSearch(ref, wiki, treeSha)
+  const icons = useIcons(ref, wiki, treeSha)
   const [searchOpen, setSearchOpen] = useState(false)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -151,6 +176,7 @@ export function Wiki() {
           root={wiki.root}
           activeSlug={slugPath}
           presence={presence.data?.byPath}
+          icons={icons}
           onNavigate={(slug) =>
             navigate(`/${owner}/${repo}${slug ? '/' + slug : ''}`)
           }
@@ -170,6 +196,7 @@ export function Wiki() {
             <Editor
               key={filePath}
               ref={ref}
+              sourceRef={fileRef !== ref ? fileRef : undefined}
               filePath={filePath}
               ownerRepoBase={`/${owner}/${repo}`}
               pageSlug={slugPath}
@@ -177,6 +204,7 @@ export function Wiki() {
           ) : (
             <PageView
               ref={ref}
+              sourceRef={fileRef !== ref ? fileRef : undefined}
               filePath={filePath}
               wiki={wiki}
               presence={presence.data?.byPath.get(filePath)}

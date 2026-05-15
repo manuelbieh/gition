@@ -15,19 +15,31 @@ import type { DraftActivity } from '../lib/draftBranch'
 
 type Props = {
   ref: RepoRef
+  // If provided, read content from this branch (e.g. user's draft branch)
+  // and show a banner indicating it's unpublished.
+  sourceRef?: RepoRef
   filePath: string
   wiki: WikiTree
   presence?: DraftActivity[]
   onEdit?: () => void
 }
 
-export function PageView({ ref, filePath, wiki, presence, onEdit }: Props) {
+export function PageView({
+  ref,
+  sourceRef,
+  filePath,
+  wiki,
+  presence,
+  onEdit,
+}: Props) {
   const params = useParams()
   const navigate = useNavigate()
+  const readRef = sourceRef ?? ref
+  const showingUnpublished = sourceRef && sourceRef.branch !== ref.branch
 
   const file = useQuery({
-    queryKey: ['file', ref.owner, ref.repo, ref.branch, filePath],
-    queryFn: () => fetchFile(ref, filePath),
+    queryKey: ['file', readRef.owner, readRef.repo, readRef.branch, filePath],
+    queryFn: () => fetchFile(readRef, filePath),
   })
 
   const parsed = useMemo(() => {
@@ -129,7 +141,29 @@ export function PageView({ ref, filePath, wiki, presence, onEdit }: Props) {
             {parsed.frontmatter.description}
           </p>
         )}
-        {presence && presence.length > 0 && (
+        {showingUnpublished && (
+          <div className="mt-6 flex items-center gap-3 rounded-lg bg-accent-soft border border-line px-3.5 py-2.5">
+            <svg width="14" height="14" viewBox="0 0 16 16" className="text-accent shrink-0">
+              <path
+                fill="currentColor"
+                d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM7.5 4h1v5h-1V4zm0 6h1v1.5h-1V10z"
+              />
+            </svg>
+            <span className="text-[12px] text-accent-ink flex-1">
+              <span className="font-medium">Showing your unpublished version.</span>{' '}
+              These edits aren&rsquo;t visible to others yet.
+            </span>
+            {onEdit && (
+              <button
+                onClick={onEdit}
+                className="text-[11px] text-accent-ink underline underline-offset-2 hover:no-underline"
+              >
+                Continue editing
+              </button>
+            )}
+          </div>
+        )}
+        {!showingUnpublished && presence && presence.length > 0 && (
           <div className="mt-6 flex items-center gap-3 rounded-lg bg-accent-soft border border-line px-3.5 py-2.5">
             <div className="flex -space-x-2">
               {presence.slice(0, 3).map((d) => (
@@ -153,14 +187,6 @@ export function PageView({ ref, filePath, wiki, presence, onEdit }: Props) {
                 `${presence.length} drafts on this page`
               )}
             </span>
-            {presence.length === 1 && (
-              <a
-                href={`?branch=${encodeURIComponent(presence[0].branch)}`}
-                className="text-[11px] text-accent-ink underline underline-offset-2 hover:no-underline"
-              >
-                View draft
-              </a>
-            )}
           </div>
         )}
       </header>

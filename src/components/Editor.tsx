@@ -13,25 +13,27 @@ import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { Markdown } from 'tiptap-markdown'
-import { TableMenu } from './TableMenu'
-import { EditorBubbleMenu } from './EditorBubbleMenu'
-import { SlashCommand } from './SlashMenu'
 import matter from 'gray-matter'
-import { fetchFile, fetchAuthedUser, type RepoRef } from '../lib/github'
+import {
+  fetchFile,
+  fetchAuthedUser,
+  type RepoRef,
+} from '../lib/github'
 import {
   autosaveToDraftBranch,
   ensureDraftBranch,
   publishDraft,
   resetDraftBranchToTarget,
-  uploadAssetToDraftBranch,
   type AutosaveSession,
   type DraftBranchInfo,
-  type PublishResult,
 } from '../lib/draftBranch'
-import { slugify } from '../lib/slug'
-import { FrontmatterControls, type Frontmatter } from './FrontmatterControls'
 import { readDraft, writeDraft, clearDraft } from '../lib/drafts'
-import { displayName } from '../lib/slug'
+import { displayName, slugify } from '../lib/slug'
+import { uploadAssetToDraftBranch } from '../lib/draftBranch'
+import { TableMenu } from './TableMenu'
+import { EditorBubbleMenu } from './EditorBubbleMenu'
+import { SlashCommand } from './SlashMenu'
+import { FrontmatterControls, type Frontmatter } from './FrontmatterControls'
 
 type WithMarkdown = {
   storage: { markdown: { getMarkdown: () => string } }
@@ -39,30 +41,35 @@ type WithMarkdown = {
 
 type Props = {
   ref: RepoRef
+  // Optional: read initial content from a different branch (e.g. user's
+  // draft branch) than the one we save to.
+  sourceRef?: RepoRef
   filePath: string
   ownerRepoBase: string
   pageSlug: string
 }
 
-// Autosave timing (Phase 2 defaults; configurable later via gition.config.json)
-const IDLE_MS = 60_000
-const MAX_AGE_MS = 300_000
+// Autosave triggers — IndexedDB always on every keystroke (debounced 500ms).
+// Remote save fires on: explicit Save, blur, navigate, idle MAX_AGE.
+const MAX_AGE_MS = 5 * 60 * 1000
 
-type AutosaveState =
-  | { phase: 'idle' }
-  | { phase: 'pending' } // change made, timer running
+type SaveStatus =
+  | { phase: 'clean' } // saved & no edits
+  | { phase: 'dirty' } // edits present, not yet sent
   | { phase: 'saving' }
-  | { phase: 'saved'; at: string }
+  | { phase: 'saved'; at: Date }
+  | { phase: 'pr'; url: string; number: number }
   | { phase: 'error'; message: string }
 
-export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
+export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Props) {
   const navigate = useNavigate()
   const [, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
+  const readRef = sourceRef ?? ref
 
   const file = useQuery({
-    queryKey: ['file', ref.owner, ref.repo, ref.branch, filePath],
-    queryFn: () => fetchFile(ref, filePath),
+    queryKey: ['file', readRef.owner, readRef.repo, readRef.branch, filePath],
+    queryFn: () => fetchFile(readRef, filePath),
   })
 
   const user = useQuery({
@@ -71,42 +78,30 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     staleTime: Infinity,
   })
 
-  const [dirty, setDirty] = useState(false)
-  const [autosave, setAutosave] = useState<AutosaveState>({ phase: 'idle' })
-  const [publishState, setPublishState] = useState<
-    | { phase: 'idle' }
-    | { phase: 'publishing' }
-    | { phase: 'done'; result: PublishResult }
-    | { phase: 'error'; message: string }
-  >({ phase: 'idle' })
+  const [status, setStatus] = useState<SaveStatus>({ phase: 'clean' })
+  const [frontmatter, setFrontmatter] = useState<Frontmatter>({})
   const [uploadCount, setUploadCount] = useState(0)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+
   const initialMarkdownRef = useRef<string>('')
-  const [frontmatter, setFrontmatter] = useState<Frontmatter>({})
   const seededRef = useRef(false)
-
-  // Per-page autosave session state (resets on filePath change via useEffect)
-  const sessionRef = useRef<AutosaveSession | null>(null)
+  const dirtyRef = useRef(false)
+  const fileShaRef = useRef<string | null>(null)
   const draftBranchRef = useRef<DraftBranchInfo | null>(null)
+  const sessionRef = useRef<AutosaveSession | null>(null)
 
-  // Timer refs
   const draftWriteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const maxAgeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const inFlightRef = useRef<Promise<void> | null>(null)
 
-  // Refs let handlePaste/handleDrop call the latest version of these without
-  // remounting the editor when user.data resolves or filePath changes.
+  // Refs let editor's editorProps closures call latest versions
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
   const handleImageDropRef = useRef<(files: File[]) => Promise<void>>(async () => {})
 
   handleImageDropRef.current = async (files: File[]) => {
-    if (!user.data) {
-      console.warn('[gition] image upload requires sign-in')
-      return
-    }
+    if (!user.data) return
     for (const file of files) {
       setUploadCount((n) => n + 1)
       try {
@@ -124,7 +119,7 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
           branch: draftBranchRef.current.branch,
           path: assetPath,
           bytes,
-          message: `gition draft: upload ${file.name}`,
+          message: `gition: upload ${file.name}`,
         })
         editorRef.current
           ?.chain()
@@ -181,13 +176,17 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
       },
     },
     onUpdate({ editor }) {
-      setDirty(true)
-      setAutosave({ phase: 'pending' })
+      dirtyRef.current = true
+      setStatus({ phase: 'dirty' })
       const md = (editor as unknown as WithMarkdown).storage.markdown.getMarkdown()
       scheduleDraftWrite(md)
-      scheduleAutosave()
+      scheduleMaxAgeSave()
     },
   })
+
+  useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
 
   const getMd = useCallback((): string | null => {
     if (!editor) return null
@@ -196,40 +195,36 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
 
   const scheduleDraftWrite = useCallback(
     (md: string) => {
-      if (!file.data) return
+      if (fileShaRef.current === null) return
       if (draftWriteTimer.current) clearTimeout(draftWriteTimer.current)
       draftWriteTimer.current = setTimeout(() => {
         writeDraft(ref, filePath, {
           markdown: md,
-          baseSha: file.data!.sha,
+          baseSha: fileShaRef.current!,
           baseContent: initialMarkdownRef.current,
           lastEditedAt: new Date().toISOString(),
         }).catch((err) => console.warn('[gition] draft write failed', err))
       }, 500)
     },
-    [file.data, filePath, ref],
+    [filePath, ref],
   )
 
-  // Commit current editor markdown to the draft branch. Idempotent — fine to
-  // call from autosave timer, explicit Save, blur, or unmount.
-  const commitDraft = useCallback(async (): Promise<void> => {
+  // Unified save flow: stage on user's draft branch (which collapses with
+  // session squash), then fast-forward target from there. If FF isn't
+  // allowed (protection / divergence), publishDraft falls back to a PR.
+  // For the common solo-user case this is two extra API calls vs a raw
+  // PUT — acceptable trade for handling all branching cleanly.
+  const save = useCallback(async (): Promise<void> => {
     if (inFlightRef.current) return inFlightRef.current
-    if (!file.data || !editor || !user.data) return
+    if (!editor || !user.data || fileShaRef.current === null) return
+    if (!dirtyRef.current) return
 
     const md = getMd()
     if (md === null) return
 
-    // Skip if nothing changed since the last commit. We compare to the
-    // last-committed content stored alongside session state.
-    if (sessionRef.current?.lastCommitSha) {
-      // We don't track exact content per commit; rely on dirty flag instead.
-    }
-    if (!dirty) return
-
-    const fullContent = serializeWithFrontmatter(md, frontmatter)
-
     const run = (async () => {
-      setAutosave({ phase: 'saving' })
+      setStatus({ phase: 'saving' })
+      const full = serializeWithFrontmatter(md, frontmatter)
       try {
         if (!draftBranchRef.current) {
           draftBranchRef.current = await ensureDraftBranch(
@@ -238,27 +233,69 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
             ref.branch,
           )
         }
-        const result = await autosaveToDraftBranch({
+        const upload = await autosaveToDraftBranch({
           ref,
           branch: draftBranchRef.current.branch,
           path: filePath,
-          content: fullContent,
-          message: `gition draft: ${displayName(filePath)}`,
+          content: full,
+          message: `gition: update ${displayName(filePath)}`,
           session: sessionRef.current,
         })
-        sessionRef.current = result.newSession
-        await clearDraft(ref, filePath)
-        setDirty(false)
-        setAutosave({ phase: 'saved', at: new Date().toISOString() })
-        // Reset timers
-        if (idleTimer.current) clearTimeout(idleTimer.current)
-        if (maxAgeTimer.current) clearTimeout(maxAgeTimer.current)
-        idleTimer.current = undefined
-        maxAgeTimer.current = undefined
+        sessionRef.current = upload.newSession
+        const result = await publishDraft({
+          ref,
+          draftBranch: draftBranchRef.current.branch,
+          targetBranch: ref.branch,
+          knownDraftHeadSha: upload.newCommitSha,
+        })
+        if (result.kind === 'fast-forward') {
+          try {
+            await resetDraftBranchToTarget(
+              ref,
+              draftBranchRef.current.branch,
+              ref.branch,
+            )
+          } catch {
+            // non-fatal
+          }
+          // Anchor next session at the published HEAD so subsequent autosaves
+          // parent correctly without relying on the eventually-consistent
+          // GET /git/ref read.
+          sessionRef.current = {
+            rootSha: result.targetHeadSha,
+            lastCommitSha: result.targetHeadSha,
+          }
+          fileShaRef.current = null // force the next save to re-resolve SHA
+          dirtyRef.current = false
+          await clearDraft(ref, filePath)
+          setStatus({ phase: 'saved', at: new Date() })
+          if (maxAgeTimer.current) clearTimeout(maxAgeTimer.current)
+          maxAgeTimer.current = undefined
+          // Invalidate file cache so future loads see fresh content + SHA
+          queryClient.invalidateQueries({
+            queryKey: ['file', ref.owner, ref.repo, ref.branch, filePath],
+          })
+          // Also invalidate user-unpublished state so it clears if this was
+          // the last unpublished file
+          queryClient.invalidateQueries({
+            queryKey: ['unpublished', ref.owner, ref.repo, ref.branch],
+          })
+        } else if (result.kind === 'pr-opened') {
+          dirtyRef.current = false
+          await clearDraft(ref, filePath)
+          setStatus({
+            phase: 'pr',
+            url: result.url,
+            number: result.number,
+          })
+          if (maxAgeTimer.current) clearTimeout(maxAgeTimer.current)
+          maxAgeTimer.current = undefined
+        } else {
+          // nothing-to-publish — shouldn't happen since we just wrote
+          setStatus({ phase: 'saved', at: new Date() })
+        }
       } catch (err) {
-        const message = (err as Error).message
-        setAutosave({ phase: 'error', message })
-        console.error('[gition] draft commit failed', err)
+        setStatus({ phase: 'error', message: (err as Error).message })
       }
     })()
     inFlightRef.current = run
@@ -267,26 +304,17 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     } finally {
       inFlightRef.current = null
     }
-  }, [editor, file.data, filePath, getMd, ref, user.data, dirty])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, filePath, frontmatter, getMd, queryClient, ref, user.data])
 
-  const scheduleAutosave = useCallback(() => {
-    if (idleTimer.current) clearTimeout(idleTimer.current)
-    idleTimer.current = setTimeout(() => {
-      void commitDraft()
-    }, IDLE_MS)
-    if (!maxAgeTimer.current) {
-      maxAgeTimer.current = setTimeout(() => {
-        void commitDraft()
-      }, MAX_AGE_MS)
-    }
-  }, [commitDraft])
+  const scheduleMaxAgeSave = useCallback(() => {
+    if (maxAgeTimer.current) return // already scheduled
+    maxAgeTimer.current = setTimeout(() => {
+      void save()
+    }, MAX_AGE_MS)
+  }, [save])
 
-  // Keep editorRef in sync so the paste/drop handlers can access the editor.
-  useEffect(() => {
-    editorRef.current = editor
-  }, [editor])
-
-  // Seed editor content once file + editor are both ready.
+  // Seed editor once when file + editor are both ready.
   useEffect(() => {
     if (!editor || !file.data || seededRef.current) return
     seededRef.current = true
@@ -295,131 +323,35 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
       const body = stripLeadingTitleHeading(remote.content, displayName(filePath))
       setFrontmatter(remote.data as Frontmatter)
       initialMarkdownRef.current = body
+      fileShaRef.current = file.data!.sha
 
       const draft = await readDraft(ref, filePath)
       const md = draft && draft.baseSha === file.data!.sha ? draft.markdown : body
       editor.commands.setContent(md, { emitUpdate: false })
-      setDirty(!!draft && draft.markdown !== body)
+      const hasDraft = !!draft && draft.markdown !== body
+      dirtyRef.current = hasDraft
+      setStatus({ phase: hasDraft ? 'dirty' : 'clean' })
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, file.data])
 
-  // Commit on visibility hidden (tab switch / minimize)
+  // Save on tab hidden, since we won't get a reliable beforeunload
   useEffect(() => {
     function onVisibility() {
-      if (document.visibilityState === 'hidden' && dirty) {
-        void commitDraft()
+      if (document.visibilityState === 'hidden' && dirtyRef.current) {
+        void save()
       }
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [commitDraft, dirty])
+  }, [save])
 
-  // Unmount cleanup — clear timers and best-effort commit on page change
   useEffect(() => {
     return () => {
       if (draftWriteTimer.current) clearTimeout(draftWriteTimer.current)
-      if (idleTimer.current) clearTimeout(idleTimer.current)
       if (maxAgeTimer.current) clearTimeout(maxAgeTimer.current)
-      // Reset session for next page
-      sessionRef.current = null
     }
   }, [filePath])
-
-  // Save to draft branch only (advanced; doesn't publish to target)
-  const onSaveNow = useCallback(() => {
-    void commitDraft()
-  }, [commitDraft])
-
-
-  const onExit = useCallback(() => {
-    // Exit without saving. Autosave + IndexedDB drafts protect against
-    // data loss; the user can come back and Save (which publishes) later.
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.delete('edit')
-      return next
-    })
-    navigate(`${ownerRepoBase}${pageSlug ? '/' + pageSlug : ''}`)
-  }, [navigate, ownerRepoBase, pageSlug, setSearchParams])
-
-  // "Save" — commits the current state AND publishes (fast-forwards target).
-  // For solo users this is what "save" should mean: my changes show up.
-  // Internally still routes through the draft branch (squash + recovery).
-  const onSave = useCallback(async () => {
-    if (!user.data) return
-    setPublishState({ phase: 'publishing' })
-    try {
-      if (dirty) await commitDraft()
-      if (!draftBranchRef.current) {
-        setPublishState({
-          phase: 'done',
-          result: { kind: 'nothing-to-publish' },
-        })
-        return
-      }
-      const result = await publishDraft({
-        ref,
-        draftBranch: draftBranchRef.current.branch,
-        targetBranch: ref.branch,
-        // Use the SHA we know was just written; bypasses GitHub's
-        // eventually-consistent /compare and /git/ref reads.
-        knownDraftHeadSha: sessionRef.current?.lastCommitSha ?? null,
-      })
-      if (result.kind === 'fast-forward') {
-        try {
-          await resetDraftBranchToTarget(
-            ref,
-            draftBranchRef.current.branch,
-            ref.branch,
-          )
-        } catch (err) {
-          console.warn('[gition] draft-branch reset failed (non-fatal)', err)
-        }
-        // DO NOT clear sessionRef. GitHub's GET /git/ref is eventually
-        // consistent right after a force-PATCH; if we set session=null,
-        // the next autosave would GET a stale draft HEAD and commit
-        // with the wrong parent, causing divergence. Instead, anchor
-        // the next session at the freshly-published target HEAD.
-        sessionRef.current = {
-          rootSha: result.targetHeadSha,
-          lastCommitSha: result.targetHeadSha,
-        }
-      }
-      setPublishState({ phase: 'done', result })
-      queryClient.invalidateQueries({
-        queryKey: ['file', ref.owner, ref.repo, ref.branch, filePath],
-      })
-      queryClient.invalidateQueries({
-        queryKey: ['tree', ref.owner, ref.repo, ref.branch],
-      })
-    } catch (err) {
-      setPublishState({ phase: 'error', message: (err as Error).message })
-    }
-  }, [commitDraft, dirty, filePath, queryClient, ref, user.data])
-
-  const onDiscard = useCallback(async () => {
-    setConfirmDiscard(false)
-    setMenuOpen(false)
-    try {
-      // Clear the local draft so we don't restore it on next open
-      await clearDraft(ref, filePath)
-      // If a draft branch exists, reset it to the target branch HEAD so the
-      // committed-but-unpublished work is also discarded.
-      if (draftBranchRef.current) {
-        const { resetDraftBranchToTarget } = await import('../lib/draftBranch')
-        await resetDraftBranchToTarget(
-          ref,
-          draftBranchRef.current.branch,
-          ref.branch,
-        )
-      }
-    } catch (err) {
-      console.warn('[gition] discard cleanup failed', err)
-    }
-    sessionRef.current = null
-    onExit()
-  }, [filePath, onExit, ref])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -430,35 +362,64 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [menuOpen])
 
-  // ⌘S / Ctrl+S: trigger Save (commit + publish).
+  // ⌘S / Ctrl+S triggers Save
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault()
-        if (publishState.phase === 'publishing') return
-        void onSave()
+        void save()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onSave, publishState.phase])
+  }, [save])
 
-  // Bust file cache when a new commit on the draft branch means we should
-  // refresh on next read. (For now, only invalidate when leaving edit mode.)
-  useEffect(() => {
-    return () => {
-      queryClient.invalidateQueries({
-        queryKey: ['file', ref.owner, ref.repo, ref.branch, filePath],
-      })
+  const onExit = useCallback(async () => {
+    // Best-effort save on exit if dirty; never block
+    if (dirtyRef.current) {
+      try {
+        await save()
+      } catch {
+        // ignore
+      }
     }
-  }, [filePath, queryClient, ref])
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('edit')
+      return next
+    })
+    navigate(`${ownerRepoBase}${pageSlug ? '/' + pageSlug : ''}`)
+  }, [navigate, ownerRepoBase, pageSlug, save, setSearchParams])
 
-  if (file.isLoading) return <div className="p-12 text-zinc-500">Loading page…</div>
+  const onDiscard = useCallback(async () => {
+    setConfirmDiscard(false)
+    setMenuOpen(false)
+    try {
+      await clearDraft(ref, filePath)
+      if (draftBranchRef.current) {
+        await resetDraftBranchToTarget(
+          ref,
+          draftBranchRef.current.branch,
+          ref.branch,
+        )
+      }
+    } catch (err) {
+      console.warn('[gition] discard cleanup failed', err)
+    }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('edit')
+      return next
+    })
+    navigate(`${ownerRepoBase}${pageSlug ? '/' + pageSlug : ''}`)
+  }, [filePath, navigate, ownerRepoBase, pageSlug, ref, setSearchParams])
+
+  if (file.isLoading) return <div className="p-12 text-muted text-sm">Loading page…</div>
   if (file.error) {
-    return <div className="p-12 text-red-600">Error: {(file.error as Error).message}</div>
+    return <div className="p-12 text-red-600 text-sm">Error: {(file.error as Error).message}</div>
   }
 
-  const statusBadge = renderStatusBadge(autosave, dirty)
+  const statusPill = renderStatusPill(status, uploadCount)
 
   return (
     <div className="h-full flex flex-col">
@@ -471,55 +432,23 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
           <span className="font-display font-display-sm text-[15px] text-ink truncate">
             {displayName(filePath)}
           </span>
-          {statusBadge}
-          {uploadCount > 0 && (
-            <span className="text-[11px] text-accent">
-              uploading {uploadCount} file{uploadCount > 1 ? 's' : ''}…
-            </span>
-          )}
+          {statusPill}
         </div>
         <div className="flex items-center gap-2">
-          {publishState.phase === 'error' && (
-            <span
-              className="text-[11px] text-red-600 max-w-xs truncate"
-              title={publishState.message}
-            >
-              save failed
-            </span>
-          )}
-          {publishState.phase === 'done' &&
-            publishState.result.kind === 'pr-opened' && (
-              <a
-                href={publishState.result.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[11px] text-accent hover:underline"
-              >
-                PR #{publishState.result.number} opened
-              </a>
-            )}
-          {publishState.phase === 'done' &&
-            publishState.result.kind === 'fast-forward' && (
-              <span className="text-[11px] text-emerald-600">Saved ✓</span>
-            )}
-          {publishState.phase === 'done' &&
-            publishState.result.kind === 'nothing-to-publish' && (
-              <span className="text-[11px] text-muted">No changes</span>
-            )}
           <button
-            onClick={onSave}
-            disabled={publishState.phase === 'publishing' || !dirty}
+            onClick={() => void save()}
+            disabled={status.phase === 'saving' || status.phase === 'clean'}
             className="gi-button gi-button-accent"
-            title="Save changes and publish (⌘S)"
+            title="Save changes (⌘S)"
           >
-            {publishState.phase === 'publishing' ? 'Saving…' : 'Save'}
+            {status.phase === 'saving' ? 'Saving…' : 'Save'}
           </button>
           <button
             onClick={onExit}
             className="gi-button gi-button-quiet"
-            title="Leave edit mode. Click Save first to publish your changes."
+            title="Leave edit mode (auto-saves if dirty)"
           >
-            Exit
+            Done
           </button>
           <div ref={menuRef} className="relative">
             <button
@@ -534,25 +463,7 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
               </svg>
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 z-30 gi-floating w-64 py-1">
-                <div className="px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-muted">
-                  Advanced
-                </div>
-                <button
-                  onClick={() => {
-                    setMenuOpen(false)
-                    void onSaveNow()
-                  }}
-                  disabled={autosave.phase === 'saving' || !dirty}
-                  className="w-full text-left px-3 py-2 text-[13px] text-ink-2 hover:text-ink hover:bg-paper-2 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                  title="Commits to your private draft branch without publishing to the wiki"
-                >
-                  Save to draft branch only
-                  <span className="block text-[10px] text-muted mt-0.5">
-                    Stage without publishing
-                  </span>
-                </button>
-                <div className="my-1 h-px bg-line" />
+              <div className="absolute right-0 top-full mt-1 z-30 gi-floating w-56 py-1">
                 <button
                   onClick={() => {
                     setMenuOpen(false)
@@ -574,8 +485,9 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
             fallbackTitle={displayName(filePath)}
             onChange={(next) => {
               setFrontmatter(next)
-              setDirty(true)
-              setAutosave({ phase: 'pending' })
+              dirtyRef.current = true
+              setStatus({ phase: 'dirty' })
+              scheduleMaxAgeSave()
             }}
           />
           <EditorContent editor={editor} />
@@ -586,7 +498,7 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
       {confirmDiscard && (
         <ConfirmDialog
           title="Discard changes?"
-          body="Your unpublished edits will be removed. This clears both the local draft and the draft branch on GitHub."
+          body="Your unsaved edits will be removed. This clears the local draft and resets any in-progress branch back to the target."
           confirmLabel="Discard"
           danger
           onCancel={() => setConfirmDiscard(false)}
@@ -595,6 +507,57 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
       )}
     </div>
   )
+}
+
+function renderStatusPill(status: SaveStatus, uploadCount: number) {
+  if (uploadCount > 0) {
+    return (
+      <span className="text-[11px] text-accent">
+        Uploading {uploadCount}…
+      </span>
+    )
+  }
+  switch (status.phase) {
+    case 'clean':
+      return null
+    case 'dirty':
+      return <span className="text-[11px] text-muted">Unsaved</span>
+    case 'saving':
+      return <span className="text-[11px] text-accent">Saving…</span>
+    case 'saved':
+      return (
+        <span className="text-[11px] text-emerald-600">
+          Saved · {formatTime(status.at)}
+        </span>
+      )
+    case 'pr':
+      return (
+        <a
+          href={status.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[11px] text-accent hover:underline"
+          title="Direct push wasn't allowed (branch protection or no write access)"
+        >
+          PR #{status.number} opened — review required
+        </a>
+      )
+    case 'error':
+      return (
+        <span
+          className="text-[11px] text-red-600 max-w-xs truncate"
+          title={status.message}
+        >
+          Save failed
+        </span>
+      )
+  }
+}
+
+function formatTime(d: Date): string {
+  const h = d.getHours().toString().padStart(2, '0')
+  const m = d.getMinutes().toString().padStart(2, '0')
+  return `${h}:${m}`
 }
 
 function ConfirmDialog({
@@ -643,22 +606,6 @@ function ConfirmDialog({
   )
 }
 
-function renderStatusBadge(state: AutosaveState, dirty: boolean) {
-  if (state.phase === 'pending')
-    return <span className="text-[11px] text-accent">· unsaved</span>
-  if (state.phase === 'saving')
-    return <span className="text-[11px] text-accent">· saving…</span>
-  if (state.phase === 'saved' && !dirty)
-    return <span className="text-[11px] text-emerald-600">· saved to draft</span>
-  if (state.phase === 'error')
-    return (
-      <span className="text-[11px] text-red-600 max-w-xs truncate" title={state.message}>
-        · save error
-      </span>
-    )
-  return null
-}
-
 function filesFromDataTransfer(dt: DataTransfer | null): File[] {
   if (!dt) return []
   const out: File[] = []
@@ -672,8 +619,6 @@ function filesFromDataTransfer(dt: DataTransfer | null): File[] {
   return out
 }
 
-// Asset path convention: <page-without-md>.assets/<slug>-<timestamp>.<ext>
-// The relative markdown reference resolves from the page's containing folder.
 function assetPathFor(
   pagePath: string,
   filename: string,
