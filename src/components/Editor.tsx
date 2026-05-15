@@ -5,6 +5,7 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
+import Underline from '@tiptap/extension-underline'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Table } from '@tiptap/extension-table'
@@ -13,6 +14,8 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { Markdown } from 'tiptap-markdown'
 import { TableMenu } from './TableMenu'
+import { EditorBubbleMenu } from './EditorBubbleMenu'
+import { SlashCommand } from './SlashMenu'
 import matter from 'gray-matter'
 import { fetchFile, fetchAuthedUser, type RepoRef } from '../lib/github'
 import {
@@ -77,6 +80,9 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     | { phase: 'error'; message: string }
   >({ phase: 'idle' })
   const [uploadCount, setUploadCount] = useState(0)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const initialMarkdownRef = useRef<string>('')
   const [frontmatter, setFrontmatter] = useState<Frontmatter>({})
   const seededRef = useRef(false)
@@ -136,7 +142,8 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: false }),
-      Link.configure({ openOnClick: false }),
+      Underline,
+      Link.configure({ openOnClick: false, autolink: true }),
       Image,
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -144,6 +151,7 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
       TableRow,
       TableHeader,
       TableCell,
+      SlashCommand,
       Markdown.configure({
         html: false,
         linkify: true,
@@ -362,16 +370,61 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     }
   }, [commitDraft, dirty, filePath, queryClient, ref, user.data])
 
-  const onExit = useCallback(async () => {
-    // Save before exiting if dirty, then leave edit mode
-    if (dirty) await commitDraft()
+  const onExit = useCallback(() => {
+    // Exits edit mode WITHOUT auto-saving. Autosave + the always-on
+    // IndexedDB draft already protect against data loss; explicit
+    // commits happen only on user action.
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       next.delete('edit')
       return next
     })
     navigate(`${ownerRepoBase}${pageSlug ? '/' + pageSlug : ''}`)
-  }, [commitDraft, dirty, navigate, ownerRepoBase, pageSlug, setSearchParams])
+  }, [navigate, ownerRepoBase, pageSlug, setSearchParams])
+
+  const onDiscard = useCallback(async () => {
+    setConfirmDiscard(false)
+    setMenuOpen(false)
+    try {
+      // Clear the local draft so we don't restore it on next open
+      await clearDraft(ref, filePath)
+      // If a draft branch exists, reset it to the target branch HEAD so the
+      // committed-but-unpublished work is also discarded.
+      if (draftBranchRef.current) {
+        const { resetDraftBranchToTarget } = await import('../lib/draftBranch')
+        await resetDraftBranchToTarget(
+          ref,
+          draftBranchRef.current.branch,
+          ref.branch,
+        )
+      }
+    } catch (err) {
+      console.warn('[gition] discard cleanup failed', err)
+    }
+    sessionRef.current = null
+    onExit()
+  }, [filePath, onExit, ref])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function onDoc(e: MouseEvent) {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [menuOpen])
+
+  // ⌘S / Ctrl+S: explicit save (preempts browser save-page)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault()
+        if (dirty) void commitDraft()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [commitDraft, dirty])
 
   // Bust file cache when a new commit on the draft branch means we should
   // refresh on next read. (For now, only invalidate when leaving edit mode.)
@@ -430,25 +483,58 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
             )}
           {publishState.phase === 'done' &&
             publishState.result.kind === 'nothing-to-publish' && (
-              <span className="text-[11px] text-muted">nothing to publish</span>
+              <span className="text-[11px] text-muted">already up to date</span>
             )}
-          <button
-            onClick={onSaveNow}
-            disabled={autosave.phase === 'saving' || !dirty}
-            className="gi-button gi-button-ghost"
-          >
-            {autosave.phase === 'saving' ? 'Saving…' : 'Save draft'}
-          </button>
           <button
             onClick={onPublish}
             disabled={publishState.phase === 'publishing'}
             className="gi-button gi-button-accent"
+            title="Commit and push to the target branch"
           >
             {publishState.phase === 'publishing' ? 'Publishing…' : 'Publish'}
           </button>
-          <button onClick={onExit} className="gi-button gi-button-quiet">
-            Done
+          <button
+            onClick={onExit}
+            className="gi-button gi-button-quiet"
+            title="Leave edit mode. Drafts are kept; nothing is published."
+          >
+            Exit
           </button>
+          <div ref={menuRef} className="relative">
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="gi-button gi-button-quiet !px-2"
+              title="More"
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                <circle cx="3" cy="8" r="1.4" />
+                <circle cx="8" cy="8" r="1.4" />
+                <circle cx="13" cy="8" r="1.4" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 z-30 gi-floating w-56 py-1">
+                <button
+                  onClick={onSaveNow}
+                  disabled={autosave.phase === 'saving' || !dirty}
+                  className="w-full text-left px-3 py-2 text-[13px] text-ink-2 hover:text-ink hover:bg-paper-2 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-between"
+                >
+                  <span>Save draft now</span>
+                  <span className="text-[10px] text-muted">⌘S</span>
+                </button>
+                <div className="my-1 h-px bg-line" />
+                <button
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setConfirmDiscard(true)
+                  }}
+                  className="w-full text-left px-3 py-2 text-[13px] text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition"
+                >
+                  Discard changes…
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
       <div className="flex-1 overflow-y-auto">
@@ -463,7 +549,64 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
             }}
           />
           <EditorContent editor={editor} />
+          <EditorBubbleMenu editor={editor} />
           <TableMenu editor={editor} />
+        </div>
+      </div>
+      {confirmDiscard && (
+        <ConfirmDialog
+          title="Discard changes?"
+          body="Your unpublished edits will be removed. This clears both the local draft and the draft branch on GitHub."
+          confirmLabel="Discard"
+          danger
+          onCancel={() => setConfirmDiscard(false)}
+          onConfirm={onDiscard}
+        />
+      )}
+    </div>
+  )
+}
+
+function ConfirmDialog({
+  title,
+  body,
+  confirmLabel,
+  danger,
+  onCancel,
+  onConfirm,
+}: {
+  title: string
+  body: string
+  confirmLabel: string
+  danger?: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 gi-modal-backdrop flex items-center justify-center px-6"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm gi-floating p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="font-display text-[18px] text-ink mb-2">{title}</h3>
+        <p className="text-[13px] text-ink-2 mb-5 leading-relaxed">{body}</p>
+        <div className="flex gap-2 justify-end">
+          <button className="gi-button gi-button-ghost" onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            className={
+              danger
+                ? 'gi-button gi-button-primary !bg-red-600 hover:!bg-red-500'
+                : 'gi-button gi-button-accent'
+            }
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </button>
         </div>
       </div>
     </div>
