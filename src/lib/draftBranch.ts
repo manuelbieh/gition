@@ -206,32 +206,43 @@ export async function publishDraft(args: {
   ref: RepoRef
   draftBranch: string
   targetBranch: string
+  // If you just wrote to the draft branch, pass the returned commitSha here
+  // to bypass eventually-consistent reads on /compare and /git/ref.
+  knownDraftHeadSha?: string | null
 }): Promise<PublishResult> {
-  const { ref, draftBranch, targetBranch } = args
-  const cmp = await compareBranches(ref, targetBranch, draftBranch)
+  const { ref, draftBranch, targetBranch, knownDraftHeadSha } = args
 
-  if (cmp.status === 'identical' || cmp.status === 'behind') {
-    return { kind: 'nothing-to-publish' }
+  // Prefer the SHA we know for certain (just-written). Fall back to compare.
+  let draftHeadSha: string | null = knownDraftHeadSha ?? null
+  let status: CompareStatus | null = null
+
+  if (!draftHeadSha) {
+    const cmp = await compareBranches(ref, targetBranch, draftBranch)
+    status = cmp.status
+    draftHeadSha = cmp.headCommitSha
+    if (cmp.status === 'identical' || cmp.status === 'behind') {
+      return { kind: 'nothing-to-publish' }
+    }
   }
 
-  // IMPORTANT: do NOT GET the draft branch's ref here — GitHub's
-  // /git/ref endpoint has read-after-write inconsistency immediately
-  // after a force-PATCH, which silently returns the pre-update sha and
-  // causes us to "fast-forward" the target to its own existing HEAD
-  // (no-op). The compare response already includes the draft head as
-  // the last entry in commits[].
-  const draftHeadSha = cmp.headCommitSha
+  if (!draftHeadSha) return { kind: 'nothing-to-publish' }
 
-  if (cmp.status === 'ahead' && draftHeadSha) {
-    try {
-      await updateRef(ref, `heads/${targetBranch}`, draftHeadSha, false)
-      return { kind: 'fast-forward', targetHeadSha: draftHeadSha }
-    } catch (err) {
-      if (err instanceof GitHubError && err.status === 422) {
-        // Race: target moved between compare and update; fall through to PR
-      } else {
-        throw err
-      }
+  // Try a direct fast-forward against the known draft head. If the target
+  // moved (422), we fall back to compare-and-decide (PR for diverged).
+  try {
+    await updateRef(ref, `heads/${targetBranch}`, draftHeadSha, false)
+    return { kind: 'fast-forward', targetHeadSha: draftHeadSha }
+  } catch (err) {
+    if (!(err instanceof GitHubError) || err.status !== 422) throw err
+    // 422 from PATCH /git/refs means "not a fast-forward" — either the
+    // target moved (diverged), the target was already at our SHA, or the
+    // draft is behind. Compare to find out.
+    if (status === null) {
+      const cmp = await compareBranches(ref, targetBranch, draftBranch)
+      status = cmp.status
+    }
+    if (status === 'identical' || status === 'behind') {
+      return { kind: 'nothing-to-publish' }
     }
   }
 

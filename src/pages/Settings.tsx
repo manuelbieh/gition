@@ -56,7 +56,7 @@ export function Settings() {
       const branchInfo = await ensureDraftBranch(ref, user.data.login, ref.branch)
       const json = JSON.stringify(stripDefaults(next), null, 2) + '\n'
       const bytes = new TextEncoder().encode(json)
-      await uploadAssetToDraftBranch({
+      const upload = await uploadAssetToDraftBranch({
         ref,
         branch: branchInfo.branch,
         path: CONFIG_FILENAME,
@@ -67,6 +67,7 @@ export function Settings() {
         ref,
         draftBranch: branchInfo.branch,
         targetBranch: ref.branch,
+        knownDraftHeadSha: upload.commitSha,
       })
       if (result.kind === 'fast-forward') {
         try {

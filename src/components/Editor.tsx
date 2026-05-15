@@ -326,26 +326,46 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     }
   }, [filePath])
 
+  // Save to draft branch only (advanced; doesn't publish to target)
   const onSaveNow = useCallback(() => {
     void commitDraft()
   }, [commitDraft])
 
-  const onPublish = useCallback(async () => {
+
+  const onExit = useCallback(() => {
+    // Exit without saving. Autosave + IndexedDB drafts protect against
+    // data loss; the user can come back and Save (which publishes) later.
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('edit')
+      return next
+    })
+    navigate(`${ownerRepoBase}${pageSlug ? '/' + pageSlug : ''}`)
+  }, [navigate, ownerRepoBase, pageSlug, setSearchParams])
+
+  // "Save" — commits the current state AND publishes (fast-forwards target).
+  // For solo users this is what "save" should mean: my changes show up.
+  // Internally still routes through the draft branch (squash + recovery).
+  const onSave = useCallback(async () => {
     if (!user.data) return
     setPublishState({ phase: 'publishing' })
     try {
       if (dirty) await commitDraft()
       if (!draftBranchRef.current) {
-        // No draft branch ⇒ nothing to publish
-        setPublishState({ phase: 'done', result: { kind: 'nothing-to-publish' } })
+        setPublishState({
+          phase: 'done',
+          result: { kind: 'nothing-to-publish' },
+        })
         return
       }
       const result = await publishDraft({
         ref,
         draftBranch: draftBranchRef.current.branch,
         targetBranch: ref.branch,
+        // Use the SHA we know was just written; bypasses GitHub's
+        // eventually-consistent /compare and /git/ref reads.
+        knownDraftHeadSha: sessionRef.current?.lastCommitSha ?? null,
       })
-      // On a successful FF, reset the draft branch so it tracks target again
       if (result.kind === 'fast-forward') {
         try {
           await resetDraftBranchToTarget(
@@ -369,18 +389,6 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
       setPublishState({ phase: 'error', message: (err as Error).message })
     }
   }, [commitDraft, dirty, filePath, queryClient, ref, user.data])
-
-  const onExit = useCallback(() => {
-    // Exits edit mode WITHOUT auto-saving. Autosave + the always-on
-    // IndexedDB draft already protect against data loss; explicit
-    // commits happen only on user action.
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.delete('edit')
-      return next
-    })
-    navigate(`${ownerRepoBase}${pageSlug ? '/' + pageSlug : ''}`)
-  }, [navigate, ownerRepoBase, pageSlug, setSearchParams])
 
   const onDiscard = useCallback(async () => {
     setConfirmDiscard(false)
@@ -414,17 +422,18 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [menuOpen])
 
-  // ⌘S / Ctrl+S: explicit save (preempts browser save-page)
+  // ⌘S / Ctrl+S: trigger Save (commit + publish).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault()
-        if (dirty) void commitDraft()
+        if (publishState.phase === 'publishing') return
+        void onSave()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [commitDraft, dirty])
+  }, [onSave, publishState.phase])
 
   // Bust file cache when a new commit on the draft branch means we should
   // refresh on next read. (For now, only invalidate when leaving edit mode.)
@@ -467,7 +476,7 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
               className="text-[11px] text-red-600 max-w-xs truncate"
               title={publishState.message}
             >
-              publish failed
+              save failed
             </span>
           )}
           {publishState.phase === 'done' &&
@@ -482,21 +491,25 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
               </a>
             )}
           {publishState.phase === 'done' &&
+            publishState.result.kind === 'fast-forward' && (
+              <span className="text-[11px] text-emerald-600">Saved ✓</span>
+            )}
+          {publishState.phase === 'done' &&
             publishState.result.kind === 'nothing-to-publish' && (
-              <span className="text-[11px] text-muted">already up to date</span>
+              <span className="text-[11px] text-muted">No changes</span>
             )}
           <button
-            onClick={onPublish}
-            disabled={publishState.phase === 'publishing'}
+            onClick={onSave}
+            disabled={publishState.phase === 'publishing' || !dirty}
             className="gi-button gi-button-accent"
-            title="Commit and push to the target branch"
+            title="Save changes and publish (⌘S)"
           >
-            {publishState.phase === 'publishing' ? 'Publishing…' : 'Publish'}
+            {publishState.phase === 'publishing' ? 'Saving…' : 'Save'}
           </button>
           <button
             onClick={onExit}
             className="gi-button gi-button-quiet"
-            title="Leave edit mode. Drafts are kept; nothing is published."
+            title="Leave edit mode. Click Save first to publish your changes."
           >
             Exit
           </button>
@@ -513,14 +526,23 @@ export function Editor({ ref, filePath, ownerRepoBase, pageSlug }: Props) {
               </svg>
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 z-30 gi-floating w-56 py-1">
+              <div className="absolute right-0 top-full mt-1 z-30 gi-floating w-64 py-1">
+                <div className="px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-muted">
+                  Advanced
+                </div>
                 <button
-                  onClick={onSaveNow}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    void onSaveNow()
+                  }}
                   disabled={autosave.phase === 'saving' || !dirty}
-                  className="w-full text-left px-3 py-2 text-[13px] text-ink-2 hover:text-ink hover:bg-paper-2 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 text-[13px] text-ink-2 hover:text-ink hover:bg-paper-2 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  title="Commits to your private draft branch without publishing to the wiki"
                 >
-                  <span>Save draft now</span>
-                  <span className="text-[10px] text-muted">⌘S</span>
+                  Save to draft branch only
+                  <span className="block text-[10px] text-muted mt-0.5">
+                    Stage without publishing
+                  </span>
                 </button>
                 <div className="my-1 h-px bg-line" />
                 <button
