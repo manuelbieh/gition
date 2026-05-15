@@ -423,18 +423,21 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
 
   return (
     <div className="h-full flex flex-col">
-      <header className="flex items-center justify-between gap-3 px-6 py-3 border-b border-line sticky top-0 bg-paper/95 backdrop-blur-sm z-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="gi-chip">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-            Editing
+      <header className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2.5 sm:py-3 border-b border-line sticky top-0 bg-paper/95 backdrop-blur-sm z-10">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+          <span className="hidden sm:inline-flex">
+            <span className="gi-chip">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+              Editing
+            </span>
           </span>
-          <span className="font-display font-display-sm text-[15px] text-ink truncate">
+          <span className="sm:hidden w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+          <span className="font-display font-display-sm text-[14px] sm:text-[15px] text-ink truncate min-w-0">
             {displayName(filePath)}
           </span>
-          {statusPill}
+          <span className="hidden sm:inline">{statusPill}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             onClick={() => void save()}
             disabled={status.phase === 'saving' || status.phase === 'clean'}
@@ -443,20 +446,22 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
           >
             {status.phase === 'saving' ? 'Saving…' : 'Save'}
           </button>
-          <button
-            onClick={onExit}
-            className="gi-button gi-button-quiet"
-            title="Leave edit mode (auto-saves if dirty)"
-          >
-            Done
-          </button>
+          <span className="hidden sm:inline-flex">
+            <button
+              onClick={onExit}
+              className="gi-button gi-button-quiet"
+              title="Leave edit mode"
+            >
+              Done
+            </button>
+          </span>
           <div ref={menuRef} className="relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}
               className="gi-button gi-button-quiet !px-2"
               title="More"
             >
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="3" cy="8" r="1.4" />
                 <circle cx="8" cy="8" r="1.4" />
                 <circle cx="13" cy="8" r="1.4" />
@@ -464,6 +469,16 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
             </button>
             {menuOpen && (
               <div className="absolute right-0 top-full mt-1 z-30 gi-floating w-56 py-1">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onExit()
+                  }}
+                  className="sm:hidden w-full text-left px-3 py-2 text-[13px] text-ink-2 hover:text-ink hover:bg-paper-2 transition"
+                >
+                  Done editing
+                </button>
+                <div className="sm:hidden h-px bg-line my-1" />
                 <button
                   onClick={() => {
                     setMenuOpen(false)
@@ -478,8 +493,12 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
           </div>
         </div>
       </header>
+      {/* Mobile-only status row */}
+      <div className="sm:hidden flex items-center px-4 py-1.5 border-b border-line/60 min-h-[28px]">
+        {statusPill}
+      </div>
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[760px] px-14 py-14 relative gi-fade-in">
+        <div className="mx-auto max-w-[760px] px-5 sm:px-10 lg:px-14 py-8 sm:py-12 lg:py-14 relative gi-fade-in">
           <FrontmatterControls
             frontmatter={frontmatter}
             fallbackTitle={displayName(filePath)}

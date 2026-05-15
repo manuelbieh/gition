@@ -112,7 +112,7 @@ export function Settings() {
     draft.homepage !== config.data?.homepage
 
   return (
-    <div className="min-h-screen flex justify-center px-6 py-20">
+    <div className="min-h-[100dvh] flex justify-center px-5 sm:px-6 py-10 sm:py-20">
       <div className="w-full max-w-xl gi-fade-in">
         <button
           onClick={() => navigate(`/${owner}/${repo}`)}
@@ -120,7 +120,7 @@ export function Settings() {
         >
           ← back to wiki
         </button>
-        <h1 className="font-display text-[40px] leading-tight mb-3 text-ink">
+        <h1 className="font-display text-[30px] sm:text-[40px] leading-tight mb-3 text-ink">
           Wiki settings
         </h1>
         <p className="text-sm text-ink-2 mb-10 leading-relaxed">

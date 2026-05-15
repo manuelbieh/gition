@@ -101,6 +101,13 @@ export function PageView({
         const resolved = resolveImage(src, filePath, ref)
         return <img {...rest} alt={alt ?? ''} src={resolved} loading="lazy" />
       },
+      table({ children, ...rest }: React.TableHTMLAttributes<HTMLTableElement>) {
+        return (
+          <div className="gi-table-wrap">
+            <table {...rest}>{children}</table>
+          </div>
+        )
+      },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [filePath, wiki, params.owner, params.repo, ref.branch],
@@ -122,20 +129,24 @@ export function PageView({
   const icon = typeof parsed.frontmatter.icon === 'string' ? parsed.frontmatter.icon : null
 
   return (
-    <article className="mx-auto max-w-[760px] px-14 py-16 relative gi-fade-in">
+    <article className="mx-auto max-w-[760px] px-5 sm:px-10 lg:px-14 py-8 sm:py-12 lg:py-16 relative gi-fade-in">
       {onEdit && (
         <button
           onClick={onEdit}
-          className="absolute top-8 right-8 gi-button gi-button-ghost text-[12px]"
+          className="absolute top-4 right-4 sm:top-6 sm:right-6 lg:top-8 lg:right-8 gi-button gi-button-ghost text-[12px]"
         >
           Edit
         </button>
       )}
-      <header className="mb-10">
+      <header className="mb-8 sm:mb-10">
         {icon && (
-          <div className="text-[56px] leading-none mb-5 select-none">{icon}</div>
+          <div className="text-[44px] sm:text-[52px] lg:text-[56px] leading-none mb-4 sm:mb-5 select-none">
+            {icon}
+          </div>
         )}
-        <h1 className="font-display text-[52px] leading-[1.05] text-ink">{title}</h1>
+        <h1 className="font-display text-[34px] sm:text-[42px] lg:text-[52px] leading-[1.05] text-ink break-words">
+          {title}
+        </h1>
         {typeof parsed.frontmatter.description === 'string' && (
           <p className="mt-3 text-ink-2 text-[15px] leading-relaxed">
             {parsed.frontmatter.description}

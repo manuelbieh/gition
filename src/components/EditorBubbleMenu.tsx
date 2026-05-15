@@ -51,7 +51,7 @@ export function EditorBubbleMenu({ editor }: Props) {
         return true
       }}
     >
-      <div className="gi-floating flex items-center gap-0.5 p-1">
+      <div className="gi-floating flex items-center gap-0.5 p-1 max-w-[calc(100vw-1rem)] overflow-x-auto">
         {linkMode ? (
           <div className="flex items-center gap-1 px-1">
             <input
@@ -234,7 +234,7 @@ function Btn({
       onClick={onClick}
       title={title}
       className={clsx(
-        'w-7 h-7 flex items-center justify-center rounded text-[12.5px] transition',
+        'w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded text-[12.5px] transition',
         active
           ? 'bg-accent-soft text-accent-ink'
           : 'text-ink-2 hover:bg-paper-2 hover:text-ink',

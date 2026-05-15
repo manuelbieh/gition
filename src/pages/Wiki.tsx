@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
+import clsx from 'clsx'
+import { displayName } from '../lib/slug'
 import { fetchRepoMeta, fetchTree, type RepoRef } from '../lib/github'
 import { buildWikiTree } from '../lib/tree'
 import { fetchWikiConfig, type WikiConfig } from '../lib/config'
@@ -100,6 +102,7 @@ export function Wiki() {
   const searchApi = useSearch(ref, wiki, treeSha)
   const icons = useIcons(ref, wiki, treeSha)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const mod = e.ctrlKey || e.metaKey
@@ -149,27 +152,55 @@ export function Wiki() {
     ? wiki.bySlug.get(slugPath)
     : findHomePage(wiki, config)
 
+  const currentTitle = filePath ? displayName(filePath) : `${owner}/${repo}`
+
   return (
-    <div className="flex h-screen">
-      <aside className="w-[264px] shrink-0 border-r border-line overflow-y-auto bg-paper-2/60">
+    <div className="lg:flex h-[100dvh]">
+      {/* Sidebar — drawer on small screens, fixed column on lg+ */}
+      <aside
+        className={clsx(
+          'fixed lg:static inset-y-0 left-0 z-40 w-[280px] lg:w-[264px] shrink-0 border-r border-line overflow-y-auto bg-paper-2/95 lg:bg-paper-2/60 backdrop-blur-sm lg:backdrop-blur-none',
+          'transform transition-transform duration-200 ease-out lg:translate-x-0',
+          sidebarOpen ? 'translate-x-0 shadow-2xl lg:shadow-none' : '-translate-x-full',
+        )}
+      >
         <div className="px-4 pt-5 pb-3 sticky top-0 bg-paper-2/95 backdrop-blur-sm z-10 border-b border-line">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted hover:text-ink transition mb-3"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-            gition
-          </button>
+          <div className="flex items-center justify-between mb-3">
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted hover:text-ink transition"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+              gition
+            </button>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden text-muted hover:text-ink p-1 -m-1"
+              aria-label="Close sidebar"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path
+                  d="M4 4l10 10M14 4L4 14"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </div>
           <WikiSwitcher owner={owner} repo={repo} />
           <button
-            onClick={() => setSearchOpen(true)}
-            className="mt-3 w-full flex items-center gap-2 text-[12px] text-ink-2 hover:text-ink px-2.5 py-1.5 rounded-md bg-paper border border-line hover:border-line-2 transition"
+            onClick={() => {
+              setSearchOpen(true)
+              setSidebarOpen(false)
+            }}
+            className="mt-3 w-full flex items-center gap-2 text-[13px] text-ink-2 hover:text-ink px-2.5 py-2 rounded-md bg-paper border border-line hover:border-line-2 transition"
           >
             <svg width="13" height="13" viewBox="0 0 16 16" className="text-muted">
               <path fill="currentColor" d="M11.5 10h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L16.49 15zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z" />
             </svg>
             <span>Search</span>
-            <span className="ml-auto gi-kbd">⌘K</span>
+            <span className="ml-auto gi-kbd hidden sm:inline">⌘K</span>
           </button>
         </div>
         <Sidebar
@@ -177,11 +208,21 @@ export function Wiki() {
           activeSlug={slugPath}
           presence={presence.data?.byPath}
           icons={icons}
-          onNavigate={(slug) =>
+          onNavigate={(slug) => {
+            setSidebarOpen(false)
             navigate(`/${owner}/${repo}${slug ? '/' + slug : ''}`)
-          }
+          }}
         />
       </aside>
+
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       <SearchPalette
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
@@ -190,36 +231,68 @@ export function Wiki() {
         onRebuild={searchApi.rebuild}
         ownerRepoBase={`/${owner}/${repo}`}
       />
-      <main className="flex-1 overflow-y-auto">
-        {filePath ? (
-          editMode && getToken() ? (
-            <Editor
-              key={filePath}
-              ref={ref}
-              sourceRef={fileRef !== ref ? fileRef : undefined}
-              filePath={filePath}
-              ownerRepoBase={`/${owner}/${repo}`}
-              pageSlug={slugPath}
-            />
+
+      <main className="flex-1 lg:overflow-y-auto min-w-0 flex flex-col h-[100dvh] lg:h-auto">
+        {/* Mobile top bar — visible only below lg */}
+        <header className="lg:hidden sticky top-0 z-20 flex items-center gap-2 px-3 py-2.5 border-b border-line bg-paper/95 backdrop-blur-sm">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 -m-1 text-ink-2 hover:text-ink"
+            aria-label="Open sidebar"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path
+                d="M3 5h14M3 10h14M3 15h14"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+          <span className="font-display font-display-sm text-[15px] text-ink truncate flex-1">
+            {currentTitle}
+          </span>
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="p-2 -m-1 text-ink-2 hover:text-ink"
+            aria-label="Search"
+          >
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M11.5 10h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L16.49 15zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z" />
+            </svg>
+          </button>
+        </header>
+        <div className="flex-1 overflow-y-auto">
+          {filePath ? (
+            editMode && getToken() ? (
+              <Editor
+                key={filePath}
+                ref={ref}
+                sourceRef={fileRef !== ref ? fileRef : undefined}
+                filePath={filePath}
+                ownerRepoBase={`/${owner}/${repo}`}
+                pageSlug={slugPath}
+              />
+            ) : (
+              <PageView
+                ref={ref}
+                sourceRef={fileRef !== ref ? fileRef : undefined}
+                filePath={filePath}
+                wiki={wiki}
+                presence={presence.data?.byPath.get(filePath)}
+                onEdit={
+                  getToken()
+                    ? () => navigate(`?edit=1`, { replace: false })
+                    : undefined
+                }
+              />
+            )
           ) : (
-            <PageView
-              ref={ref}
-              sourceRef={fileRef !== ref ? fileRef : undefined}
-              filePath={filePath}
-              wiki={wiki}
-              presence={presence.data?.byPath.get(filePath)}
-              onEdit={
-                getToken()
-                  ? () => navigate(`?edit=1`, { replace: false })
-                  : undefined
-              }
-            />
-          )
-        ) : (
-          <FullPageMessage>
-            {slugPath ? `Page not found: ${slugPath}` : 'Empty wiki'}
-          </FullPageMessage>
-        )}
+            <FullPageMessage>
+              {slugPath ? `Page not found: ${slugPath}` : 'Empty wiki'}
+            </FullPageMessage>
+          )}
+        </div>
       </main>
     </div>
   )

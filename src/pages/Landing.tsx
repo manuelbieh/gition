@@ -23,9 +23,9 @@ export function Landing() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-[100dvh] flex flex-col">
       {/* Top bar */}
-      <header className="flex items-center justify-between px-8 py-5">
+      <header className="flex items-center justify-between px-5 sm:px-8 py-4 sm:py-5">
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted">
           <span className="w-1.5 h-1.5 rounded-full bg-accent" />
           gition
@@ -47,12 +47,12 @@ export function Landing() {
       </header>
 
       {/* Hero */}
-      <main className="flex-1 flex items-center justify-center px-6">
+      <main className="flex-1 flex items-center justify-center px-5 sm:px-6 py-8">
         <div className="w-full max-w-xl gi-fade-in">
-          <div className="mb-6 text-[11px] uppercase tracking-[0.22em] text-muted">
+          <div className="mb-4 sm:mb-6 text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-muted">
             wikis, bound to GitHub
           </div>
-          <h1 className="font-display text-[64px] leading-[0.95] mb-4 text-ink">
+          <h1 className="font-display text-[40px] sm:text-[52px] md:text-[64px] leading-[0.95] mb-4 text-ink">
             Write{' '}
             <span className="font-display-italic text-accent">together,</span>
             <br /> stored as markdown.
@@ -66,10 +66,13 @@ export function Landing() {
           <form onSubmit={onSubmit} className="flex gap-2 mb-3">
             <input
               type="text"
+              inputMode="url"
+              autoCapitalize="off"
+              autoCorrect="off"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="owner/repo or github.com/owner/repo"
-              className="gi-input flex-1"
+              placeholder="owner/repo"
+              className="gi-input flex-1 min-w-0"
               autoFocus
             />
             <button type="submit" className="gi-button gi-button-accent">
@@ -109,13 +112,13 @@ export function Landing() {
       </main>
 
       {/* Footer */}
-      <footer className="px-8 py-6 text-[11px] uppercase tracking-[0.18em] text-hush flex items-center justify-between">
-        <span>Markdown · GitHub · no servers</span>
+      <footer className="px-5 sm:px-8 py-5 sm:py-6 text-[10px] sm:text-[11px] uppercase tracking-[0.18em] text-hush flex items-center justify-between gap-3">
+        <span className="truncate">Markdown · GitHub · no servers</span>
         <a
           href="https://github.com/manuelbieh/gition"
           target="_blank"
           rel="noreferrer"
-          className="hover:text-ink transition"
+          className="hover:text-ink transition shrink-0"
         >
           source ↗
         </a>

@@ -30,12 +30,12 @@ export function AuthPrompt({ owner, repo, status, onRetry }: Props) {
         : 'Couldn’t load this wiki'
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
+    <div className="min-h-[100dvh] flex items-center justify-center px-5 sm:px-6 py-10">
       <div className="w-full max-w-md gi-fade-in">
-        <div className="mb-3 text-[11px] uppercase tracking-[0.22em] text-muted">
-          <span className="font-mono">{owner}/{repo}</span>
+        <div className="mb-3 text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-muted">
+          <span className="font-mono break-all">{owner}/{repo}</span>
         </div>
-        <h2 className="font-display text-[32px] leading-tight mb-3 text-ink">
+        <h2 className="font-display text-[26px] sm:text-[32px] leading-tight mb-3 text-ink">
           {headline}
         </h2>
         <p className="text-ink-2 mb-8 text-sm leading-relaxed">

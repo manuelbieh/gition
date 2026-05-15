@@ -73,7 +73,7 @@ export function SearchPalette({
 
   return (
     <div
-      className="fixed inset-0 z-50 gi-modal-backdrop flex items-start justify-center pt-[18vh] px-4 gi-fade-in"
+      className="fixed inset-0 z-50 gi-modal-backdrop flex items-start justify-center pt-[12vh] sm:pt-[18vh] px-3 sm:px-4 gi-fade-in"
       onClick={onClose}
     >
       <div
@@ -159,7 +159,7 @@ export function SearchPalette({
             </div>
           )}
         </div>
-        <div className="px-4 py-2.5 text-[11px] text-muted border-t border-line flex gap-4">
+        <div className="hidden sm:flex px-4 py-2.5 text-[11px] text-muted border-t border-line gap-4">
           <span className="flex items-center gap-1.5">
             <span className="gi-kbd">↑</span>
             <span className="gi-kbd">↓</span> navigate

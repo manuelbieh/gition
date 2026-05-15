@@ -43,7 +43,7 @@ export function FrontmatterControls({ frontmatter, fallbackTitle, onChange }: Pr
             value={titleVal}
             onChange={(e) => set('title', e.target.value)}
             placeholder={fallbackTitle}
-            className="font-display w-full text-[52px] leading-[1.05] text-ink bg-transparent outline-none placeholder:text-hush"
+            className="font-display w-full text-[34px] sm:text-[42px] lg:text-[52px] leading-[1.05] text-ink bg-transparent outline-none placeholder:text-hush"
           />
         </div>
       </div>
@@ -112,8 +112,8 @@ function IconPicker({
         className={clsx(
           'shrink-0 flex items-center justify-center transition rounded-md',
           value
-            ? 'w-[68px] h-[68px] text-[56px] leading-none hover:bg-paper-2 -ml-1'
-            : 'h-7 px-2.5 text-xs text-muted hover:text-ink hover:bg-paper-2 mt-3 border border-line gap-1.5',
+            ? 'w-[52px] h-[52px] sm:w-[68px] sm:h-[68px] text-[44px] sm:text-[56px] leading-none hover:bg-paper-2 -ml-1'
+            : 'h-7 px-2.5 text-xs text-muted hover:text-ink hover:bg-paper-2 mt-2 sm:mt-3 border border-line gap-1.5',
         )}
       >
         {value || (
