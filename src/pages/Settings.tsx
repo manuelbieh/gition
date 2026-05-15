@@ -71,7 +71,12 @@ export function Settings() {
       })
       if (result.kind === 'fast-forward') {
         try {
-          await resetDraftBranchToTarget(ref, branchInfo.branch, ref.branch)
+          await resetDraftBranchToTarget(
+            ref,
+            branchInfo.branch,
+            ref.branch,
+            result.targetHeadSha,
+          )
         } catch {
           // non-fatal
         }

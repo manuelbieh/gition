@@ -129,7 +129,7 @@ export function PageView({
   const icon = typeof parsed.frontmatter.icon === 'string' ? parsed.frontmatter.icon : null
 
   return (
-    <article className="mx-auto max-w-[760px] px-5 sm:px-10 lg:px-14 py-8 sm:py-12 lg:py-16 relative gi-fade-in">
+    <article className="mx-auto max-w-[960px] px-5 sm:px-10 lg:px-14 py-8 sm:py-12 lg:py-16 relative gi-fade-in">
       {onEdit && (
         <button
           onClick={onEdit}

@@ -28,11 +28,13 @@ import {
   type DraftBranchInfo,
 } from '../lib/draftBranch'
 import { readDraft, writeDraft, clearDraft } from '../lib/drafts'
+import { patchIcon } from '../lib/icons'
 import { displayName, slugify } from '../lib/slug'
 import { uploadAssetToDraftBranch } from '../lib/draftBranch'
-import { TableMenu } from './TableMenu'
+import { TableHandles } from './TableHandles'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
 import { SlashCommand } from './SlashMenu'
+import { TableTextSelect } from '../lib/tableTextSelect'
 import { FrontmatterControls, type Frontmatter } from './FrontmatterControls'
 
 type WithMarkdown = {
@@ -82,13 +84,16 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
   const [frontmatter, setFrontmatter] = useState<Frontmatter>({})
   const [uploadCount, setUploadCount] = useState(0)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
 
   const initialMarkdownRef = useRef<string>('')
   const seededRef = useRef(false)
   const dirtyRef = useRef(false)
-  const fileShaRef = useRef<string | null>(null)
+  // Tracks whether the editor has been seeded with content — gates save
+  // attempts that would otherwise fire before the initial content loaded.
+  const seededReadyRef = useRef(false)
+  // File blob SHA at seed time — used only for draft-restore-on-reload
+  // to detect if remote moved since the draft was written.
+  const baseShaRef = useRef<string>('')
   const draftBranchRef = useRef<DraftBranchInfo | null>(null)
   const sessionRef = useRef<AutosaveSession | null>(null)
 
@@ -99,6 +104,7 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
   // Refs let editor's editorProps closures call latest versions
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
   const handleImageDropRef = useRef<(files: File[]) => Promise<void>>(async () => {})
+  const contentContainerRef = useRef<HTMLDivElement>(null)
 
   handleImageDropRef.current = async (files: File[]) => {
     if (!user.data) return
@@ -142,10 +148,11 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
       Image,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Table.configure({ resizable: true, allowTableNodeSelection: true }),
+      Table.configure({ resizable: true, allowTableNodeSelection: false }),
       TableRow,
       TableHeader,
       TableCell,
+      TableTextSelect,
       SlashCommand,
       Markdown.configure({
         html: false,
@@ -195,12 +202,12 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
 
   const scheduleDraftWrite = useCallback(
     (md: string) => {
-      if (fileShaRef.current === null) return
+      if (!seededReadyRef.current) return
       if (draftWriteTimer.current) clearTimeout(draftWriteTimer.current)
       draftWriteTimer.current = setTimeout(() => {
         writeDraft(ref, filePath, {
           markdown: md,
-          baseSha: fileShaRef.current!,
+          baseSha: baseShaRef.current,
           baseContent: initialMarkdownRef.current,
           lastEditedAt: new Date().toISOString(),
         }).catch((err) => console.warn('[gition] draft write failed', err))
@@ -216,7 +223,7 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
   // PUT — acceptable trade for handling all branching cleanly.
   const save = useCallback(async (): Promise<void> => {
     if (inFlightRef.current) return inFlightRef.current
-    if (!editor || !user.data || fileShaRef.current === null) return
+    if (!editor || !user.data || !seededReadyRef.current) return
     if (!dirtyRef.current) return
 
     const md = getMd()
@@ -250,10 +257,13 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
         })
         if (result.kind === 'fast-forward') {
           try {
+            // Pass the known target SHA to bypass eventually-consistent
+            // GET /git/ref reads.
             await resetDraftBranchToTarget(
               ref,
               draftBranchRef.current.branch,
               ref.branch,
+              result.targetHeadSha,
             )
           } catch {
             // non-fatal
@@ -265,9 +275,12 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
             rootSha: result.targetHeadSha,
             lastCommitSha: result.targetHeadSha,
           }
-          fileShaRef.current = null // force the next save to re-resolve SHA
           dirtyRef.current = false
           await clearDraft(ref, filePath)
+          // Patch icons cache so the new icon shows in the sidebar instantly
+          const iconStr =
+            typeof frontmatter.icon === 'string' ? frontmatter.icon : undefined
+          await patchIcon(ref, filePath, iconStr)
           setStatus({ phase: 'saved', at: new Date() })
           if (maxAgeTimer.current) clearTimeout(maxAgeTimer.current)
           maxAgeTimer.current = undefined
@@ -323,7 +336,8 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
       const body = stripLeadingTitleHeading(remote.content, displayName(filePath))
       setFrontmatter(remote.data as Frontmatter)
       initialMarkdownRef.current = body
-      fileShaRef.current = file.data!.sha
+      baseShaRef.current = file.data!.sha
+      seededReadyRef.current = true
 
       const draft = await readDraft(ref, filePath)
       const md = draft && draft.baseSha === file.data!.sha ? draft.markdown : body
@@ -353,14 +367,6 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
     }
   }, [filePath])
 
-  useEffect(() => {
-    if (!menuOpen) return
-    function onDoc(e: MouseEvent) {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [menuOpen])
 
   // ⌘S / Ctrl+S triggers Save
   useEffect(() => {
@@ -393,7 +399,6 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
 
   const onDiscard = useCallback(async () => {
     setConfirmDiscard(false)
-    setMenuOpen(false)
     try {
       await clearDraft(ref, filePath)
       if (draftBranchRef.current) {
@@ -438,6 +443,20 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
           <span className="hidden sm:inline">{statusPill}</span>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Discard — visible when there are unsaved/saved-but-unpublished
+              changes. Distinct red treatment so users always know they can
+              throw work away. */}
+          {(status.phase === 'dirty' ||
+            status.phase === 'saved' ||
+            status.phase === 'pr') && (
+            <button
+              onClick={() => setConfirmDiscard(true)}
+              className="gi-button gi-button-quiet !text-red-600 hover:!bg-red-50 dark:hover:!bg-red-500/10"
+              title="Throw away your edits"
+            >
+              Discard
+            </button>
+          )}
           <button
             onClick={() => void save()}
             disabled={status.phase === 'saving' || status.phase === 'clean'}
@@ -455,42 +474,18 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
               Done
             </button>
           </span>
-          <div ref={menuRef} className="relative">
+          <span className="sm:hidden">
             <button
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={onExit}
               className="gi-button gi-button-quiet !px-2"
-              title="More"
+              title="Done editing"
+              aria-label="Done editing"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                <circle cx="3" cy="8" r="1.4" />
-                <circle cx="8" cy="8" r="1.4" />
-                <circle cx="13" cy="8" r="1.4" />
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8.5l3 3 7-7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 z-30 gi-floating w-56 py-1">
-                <button
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onExit()
-                  }}
-                  className="sm:hidden w-full text-left px-3 py-2 text-[13px] text-ink-2 hover:text-ink hover:bg-paper-2 transition"
-                >
-                  Done editing
-                </button>
-                <div className="sm:hidden h-px bg-line my-1" />
-                <button
-                  onClick={() => {
-                    setMenuOpen(false)
-                    setConfirmDiscard(true)
-                  }}
-                  className="w-full text-left px-3 py-2 text-[13px] text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition"
-                >
-                  Discard changes…
-                </button>
-              </div>
-            )}
-          </div>
+          </span>
         </div>
       </header>
       {/* Mobile-only status row */}
@@ -498,7 +493,10 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
         {statusPill}
       </div>
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[760px] px-5 sm:px-10 lg:px-14 py-8 sm:py-12 lg:py-14 relative gi-fade-in">
+        <div
+          ref={contentContainerRef}
+          className="mx-auto max-w-[960px] px-5 sm:px-10 lg:px-14 py-8 sm:py-12 lg:py-14 relative gi-fade-in"
+        >
           <FrontmatterControls
             frontmatter={frontmatter}
             fallbackTitle={displayName(filePath)}
@@ -511,7 +509,7 @@ export function Editor({ ref, sourceRef, filePath, ownerRepoBase, pageSlug }: Pr
           />
           <EditorContent editor={editor} />
           <EditorBubbleMenu editor={editor} />
-          <TableMenu editor={editor} />
+          <TableHandles editor={editor} containerRef={contentContainerRef} />
         </div>
       </div>
       {confirmDiscard && (

@@ -265,14 +265,24 @@ export async function publishDraft(args: {
 // Resets the draft branch to point at the target branch's HEAD. Use after a
 // successful publish so the draft branch doesn't accumulate stale state.
 // Safe to force because nobody else writes to your draft branch.
+//
+// Pass `knownTargetSha` whenever you can — GitHub's GET /git/ref is
+// read-after-write inconsistent and would otherwise return the pre-FF
+// SHA, leaving the draft branch BEHIND the target and breaking the next
+// save (commits would parent on an outdated SHA → diverged → PR fallback).
 export async function resetDraftBranchToTarget(
   ref: RepoRef,
   draftBranch: string,
   targetBranch: string,
+  knownTargetSha?: string,
 ): Promise<void> {
-  const target = await getRef(ref, `heads/${targetBranch}`)
-  if (!target) throw new Error(`Target branch '${targetBranch}' not found`)
-  await updateRef(ref, `heads/${draftBranch}`, target.object.sha, true)
+  let sha = knownTargetSha
+  if (!sha) {
+    const target = await getRef(ref, `heads/${targetBranch}`)
+    if (!target) throw new Error(`Target branch '${targetBranch}' not found`)
+    sha = target.object.sha
+  }
+  await updateRef(ref, `heads/${draftBranch}`, sha, true)
 }
 
 // Uploads a binary file (typically an asset like a pasted image) to the

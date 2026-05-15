@@ -101,9 +101,10 @@ async function buildIconMap(
   return icons
 }
 
-// Hook: loads icons in the background after the tree is available. The
-// returned map updates as new icons arrive (or returns cached results
-// immediately on a warm load).
+// Hook: loads icons in the background after the tree is available. Cached
+// results show immediately on warm loads; on a tree-fingerprint change we
+// rebuild silently. The returned `setIconFor` is used by the Editor's
+// save path to update one file's icon without waiting for the rebuild.
 export function useIcons(
   ref: RepoRef | undefined,
   wiki: WikiTree | null,
@@ -119,14 +120,16 @@ export function useIcons(
     startedRef.current = key
     let cancelled = false
     ;(async () => {
-      // Try cache first
       const cached = await get<Cached>(cacheKey(ref))
       if (cancelled) return
       if (cached?.fingerprint === fingerprint) {
         setIcons(cached.icons)
         return
       }
-      // Build fresh
+      // Cached but for a different fingerprint — show the stale icons
+      // while we rebuild, so the user isn't staring at all-placeholder
+      // pages for 10+ seconds.
+      if (cached?.icons) setIcons(cached.icons)
       const built = await buildIconMap(ref, wiki)
       if (cancelled) return
       setIcons(built)
@@ -138,4 +141,25 @@ export function useIcons(
   }, [ref, wiki, fingerprint])
 
   return icons
+}
+
+// Imperatively set a single file's icon without waiting for a rebuild.
+// Used by the Editor after a save when frontmatter.icon changed.
+export async function patchIcon(
+  ref: RepoRef,
+  filePath: string,
+  icon: string | undefined,
+): Promise<void> {
+  try {
+    const cached = (await get<Cached>(cacheKey(ref))) ?? {
+      fingerprint: '',
+      icons: {},
+    }
+    const next = { ...cached.icons }
+    if (icon) next[filePath] = icon
+    else delete next[filePath]
+    await set(cacheKey(ref), { fingerprint: cached.fingerprint, icons: next })
+  } catch {
+    // ignore
+  }
 }
